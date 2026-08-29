@@ -48,7 +48,10 @@ app.use('*', async (c, next) => {
   await next();
   c.header('Content-Security-Policy', CSP);
   c.header('X-Content-Type-Options', 'nosniff');
-  c.header('Referrer-Policy', 'same-origin');
+  // strict-origin-when-cross-origin (not same-origin): the Google Picker
+  // validates its referrer-restricted API key via the Referer header, so
+  // cross-origin requests must carry at least the origin. No paths leak.
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   c.header('X-Frame-Options', 'DENY');
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   // HSTS only where TLS exists (never on http://localhost — a cached HSTS

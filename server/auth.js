@@ -115,7 +115,14 @@ const sessionCookieName = (c) => (cookieSecure(c) ? '__Host-tl.session' : 'tl.se
 
 // ---------- OAuth flow ----------
 
-const redirectUri = (c) => new URL(c.req.url).origin + '/auth/callback';
+/** Always https except on localhost: a first visit over plain http (before
+ *  any edge redirect kicks in) must not build an http:// redirect URI, which
+ *  Google would reject as unregistered. */
+const redirectUri = (c) => {
+  const url = new URL(c.req.url);
+  if (cookieSecure(c)) url.protocol = 'https:';
+  return url.origin + '/auth/callback';
+};
 
 /** GET /auth/login[?consent=1] — send the user to Google. */
 export async function login(c) {

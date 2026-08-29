@@ -32,6 +32,9 @@ export async function pickSpreadsheet() {
       .setOAuthToken(cfg.accessToken)
       .setDeveloperKey(cfg.apiKey)
       .setAppId(cfg.appId)
+      // tell the picker iframe its embedding origin explicitly, so key
+      // validation doesn't depend on what the Referer header carries
+      .setOrigin(location.protocol + '//' + location.host)
       .addView(view)
       .setCallback((data) => {
         if (data.action === google.picker.Action.PICKED) {

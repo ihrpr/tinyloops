@@ -13,7 +13,7 @@ main = "server/index.js"
 compatibility_date = "2025-06-01"
 
 [assets]
-directory = "dist"          # Vite build output (run `npm run build` first)
+directory = "dist" # Vite build output (run `npm run build` first)
 binding = "ASSETS"
 # Every request hits the Worker first so it can attach security headers
 # (CSP, frame-ancestors, etc.) to static responses too; the Worker forwards
@@ -28,9 +28,9 @@ binding = "DB"
 database_name = "tinyloops"
 # Placeholder — replace with the real ID from `wrangler d1 create tinyloops`
 # before the first remote deploy. Local dev ignores it.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "d4cda45b-1c5c-4d3b-8366-522a7a518cf3"
 
 # Production domain — uncomment once the Worker is ready to go live.
-# [[routes]]
-# pattern = "tinyloops.app"
-# custom_domain = true
+[[routes]]
+pattern = "tinyloops.app"
+custom_domain = true
