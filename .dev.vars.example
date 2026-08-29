@@ -1,0 +1,9 @@
+# Copy to .dev.vars (gitignored) and fill in for local development.
+# Add http://localhost:8787/auth/callback as a redirect URI on the OAuth
+# client, and http://localhost:8787 as an authorized JavaScript origin.
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_API_KEY=your-browser-api-key
+GOOGLE_APP_ID=536961216362
+# openssl rand -base64 32
+TOKEN_ENC_KEY=replace-with-base64-32-bytes

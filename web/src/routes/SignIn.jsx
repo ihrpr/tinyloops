@@ -1,0 +1,76 @@
+import { useEffect, useState } from 'react';
+
+const IN_APP_BROWSER = /FBAN|FBAV|Instagram|Line\/|GSA\/|; wv\)/.test(navigator.userAgent);
+
+const AUTH_ERRORS = {
+  state_mismatch: 'Sign-in couldn’t be verified. Please try again.',
+  token_exchange: 'Google sign-in failed. Please try again.',
+  token_invalid: 'Google sign-in couldn’t be verified. Please try again.',
+  access_denied: 'Sign-in was cancelled.',
+};
+
+export function SignIn() {
+  const [error, setError] = useState('');
+
+  // Map a known ?auth_error code to a fixed message; never reflect the raw
+  // value (that would put attacker text on our own origin). Then strip it.
+  useEffect(() => {
+    const code = new URLSearchParams(location.search).get('auth_error');
+    if (code) {
+      setError(AUTH_ERRORS[code] || 'Sign-in failed. Please try again.');
+      history.replaceState(null, '', location.pathname);
+    }
+  }, []);
+
+  return (
+    <section id="view-signin">
+      <div className="hero">
+        <img className="hero-logo" src="/icons/icon-192.png" alt="" />
+        <h1>Tinyloops</h1>
+        <p className="tagline">Feeds, sleep and nappies — logged in seconds,
+          together with your partner.</p>
+      </div>
+
+      <div className="card">
+        <div className="feature">
+          <span className="icn t-feed">🤱</span>
+          <div><b>One-tap logging</b><span>Live timers for feeds, sleep and play</span></div>
+        </div>
+        <div className="feature">
+          <span className="icn t-bottle">📈</span>
+          <div><b>Summary &amp; stats</b><span>Milk intake, last feed, nappies at a glance</span></div>
+        </div>
+        <div className="feature">
+          <span className="icn t-pump">🔒</span>
+          <div><b>Yours alone</b><span>Data lives in a Google Sheet in your Drive</span></div>
+        </div>
+        {IN_APP_BROWSER && (
+          <p className="warn">It looks like this page is open inside another app,
+            where Google blocks sign-in. Open it in Safari or Chrome instead.</p>
+        )}
+        <button className="primary" onClick={() => { location.href = '/auth/login'; }}>
+          Sign in with Google
+        </button>
+        {error && <p className="status error">{error}</p>}
+      </div>
+
+      <h2>Use it like an app</h2>
+      <details className="card platform">
+        <summary>🍎 On iPhone</summary>
+        <ol className="steps">
+          <li>Open this page in your <b>browser</b></li>
+          <li>Tap <b>Share</b></li>
+          <li>Choose <b>Add to Home Screen</b></li>
+        </ol>
+      </details>
+      <details className="card platform">
+        <summary>🤖 On Android</summary>
+        <ol className="steps">
+          <li>Open this page in your <b>browser</b></li>
+          <li>Tap the <b>⋮</b> menu</li>
+          <li>Choose <b>Add to Home screen</b></li>
+        </ol>
+      </details>
+    </section>
+  );
+}

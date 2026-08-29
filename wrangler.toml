@@ -1,0 +1,36 @@
+# Tinyloops — single Worker serving the static PWA (web/) and the API.
+#
+# Secrets (set with `wrangler secret put <NAME>`, or .dev.vars locally):
+#   GOOGLE_CLIENT_ID      OAuth 2.0 web client ID
+#   GOOGLE_CLIENT_SECRET  its client secret (code flow runs server-side)
+#   GOOGLE_API_KEY        browser API key — used only by the Google Picker
+#   GOOGLE_APP_ID         Cloud project number (Picker + drive.file grants)
+#   TOKEN_ENC_KEY         base64 32-byte key for AES-GCM refresh-token
+#                         encryption (`openssl rand -base64 32`)
+
+name = "tinyloops"
+main = "server/index.js"
+compatibility_date = "2025-06-01"
+
+[assets]
+directory = "dist"          # Vite build output (run `npm run build` first)
+binding = "ASSETS"
+# Every request hits the Worker first so it can attach security headers
+# (CSP, frame-ancestors, etc.) to static responses too; the Worker forwards
+# non-API/auth paths to ASSETS. See the fetch handler in server/index.js.
+run_worker_first = true
+# SPA fallback: unknown client routes (e.g. /stats) serve index.html so
+# React Router can handle them.
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tinyloops"
+# Placeholder — replace with the real ID from `wrangler d1 create tinyloops`
+# before the first remote deploy. Local dev ignores it.
+database_id = "00000000-0000-0000-0000-000000000000"
+
+# Production domain — uncomment once the Worker is ready to go live.
+# [[routes]]
+# pattern = "tinyloops.app"
+# custom_domain = true

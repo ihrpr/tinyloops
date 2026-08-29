@@ -1,0 +1,36 @@
+import { createBrowserRouter } from 'react-router-dom';
+import { api, NeedsSignIn, DEMO } from './api.js';
+import { App } from './App.jsx';
+import { ErrorScreen } from './components/ErrorScreen.jsx';
+import { SignIn } from './routes/SignIn.jsx';
+import { Connect } from './routes/Connect.jsx';
+import { Tracker } from './routes/Tracker.jsx';
+import { Stats } from './routes/Stats.jsx';
+
+// Resolve the session once at the app root: decides sign-in vs connect vs
+// the tracker. The App shell reads this (via useOutletContext) and redirects
+// as needed; individual views then fetch their own data.
+async function rootLoader() {
+  if (DEMO) return { email: 'demo@example.com', hasSheet: true, demo: true };
+  try {
+    return await api('/api/me');
+  } catch (err) {
+    if (err instanceof NeedsSignIn) return { signedOut: true };
+    throw err;
+  }
+}
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <App />,
+    errorElement: <ErrorScreen />,
+    loader: rootLoader,
+    children: [
+      { index: true, element: <Tracker /> },
+      { path: 'stats', element: <Stats /> },
+      { path: 'connect', element: <Connect /> },
+      { path: 'signin', element: <SignIn /> },
+    ],
+  },
+]);
