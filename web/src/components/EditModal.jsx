@@ -50,7 +50,7 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
       <div id="modal">
         <h2>Edit entry</h2>
         <select value={type} onChange={(e) => setType(e.target.value)}>
-          {types.map((t) => <option key={t.key} value={t.key}>{t.emoji} {t.label}</option>)}
+          {types.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
         </select>
 
         {type === 'feed' && <SideSeg value={side} onChange={setSide} />}

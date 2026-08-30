@@ -1,5 +1,8 @@
+import { IconChip } from './icons.jsx';
+
 // Renders the pre-computed day-summary rows from /api/home. All values and
-// labels arrive formatted from the server; this only lays them out.
+// labels arrive formatted from the server; this only lays them out. `r.k` is
+// the server's icon key for the row.
 export function DaySummary({ summary, onEditNursing }) {
   if (summary.empty) {
     return <div className="card" id="summary"><div className="empty-note">{summary.note}</div></div>;
@@ -13,7 +16,7 @@ export function DaySummary({ summary, onEditNursing }) {
         </div>
       ) : (
         <div className="sum-row" key={i}>
-          <span>{r.emoji}</span>
+          <IconChip k={r.k} small />
           <span className="lbl">{r.label}{r.ago && <span className="ago"> · {r.ago}</span>}</span>
           <span className="v">{r.value}</span>
         </div>

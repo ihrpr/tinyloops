@@ -212,10 +212,12 @@ function buildSummary(events, settings, nowWall) {
   }
 
   const rows = [];
-  const pushRow = (emoji, label, ago, parts) => {
+  // `k` is the icon key the client maps to its SVG set; emoji stays as a
+  // fallback for anything that still renders text.
+  const pushRow = (k, emoji, label, ago, parts) => {
     const value = parts.filter(Boolean).join(' · ');
     if (!value && !ago) return;
-    rows.push({ kind: 'row', emoji, label, ago, value });
+    rows.push({ kind: 'row', k, emoji, label, ago, value });
   };
   const pushSub = (label, value) => rows.push({ kind: 'sub', label, value });
 
@@ -225,7 +227,7 @@ function buildSummary(events, settings, nowWall) {
   // when were breasts last emptied (breastfeed or pump, whichever is later)
   if (en.has('feed') || en.has('pump')) {
     const lastEmpty = events.find((e) => e.type === 'feed' || e.type === 'pump');
-    pushRow('🤱', 'Breasts emptied', '',
+    pushRow('feed', '🤱', 'Breasts emptied', '',
       [openFeed ? 'feeding now'
         : lastEmpty ? agoDur(lastEmpty.startWall, nowWall) + (lastEmpty.type === 'pump' ? ' (pump)' : ' (feed)')
         : '—']);
@@ -234,7 +236,7 @@ function buildSummary(events, settings, nowWall) {
   // when the baby last ate (breastfeed or bottle, whichever is later)
   if (en.has('feed') || en.has('bottle')) {
     const lastAte = events.find((e) => e.type === 'feed' || e.type === 'bottle');
-    pushRow('👶', 'Last ate', '',
+    pushRow('baby', '👶', 'Last ate', '',
       [openFeed ? 'feeding now'
         : lastAte ? agoDur(lastAte.startWall, nowWall) + (lastAte.type === 'bottle' ? ' (bottle)' : ' (breast)')
         : '—']);
@@ -245,7 +247,7 @@ function buildSummary(events, settings, nowWall) {
   const formulaMl = bottles.reduce((a, e) => a + (e.formulaMl || 0), 0);
   const breastfedMl = feeds.length * assumedMl;
   const totalMl = bmMl + formulaMl + breastfedMl;
-  pushRow('🍽️', 'Milk today', '', [totalMl ? `≈${totalMl}ml` : '']);
+  pushRow('milk', '🍽️', 'Milk today', '', [totalMl ? `≈${totalMl}ml` : '']);
   if (feeds.length) pushSub('Breastfed', `${feeds.length}× · ≈${breastfedMl}ml`);
   if (bmMl) pushSub('Bottle milk', `${bmMl}ml`);
   if (formulaMl) pushSub('Formula', `${formulaMl}ml`);
@@ -256,7 +258,7 @@ function buildSummary(events, settings, nowWall) {
     const sleepingNow = sleepsAll.some((e) => !e.endWall);
     const lastWake = sleepsAll.find((e) => e.endWall);
     const sleepMin = sleeps.reduce((a, e) => a + overlapMin(e, dayStartMs, nowWall), 0);
-    pushRow('😴', 'Sleep',
+    pushRow('sleep', '😴', 'Sleep',
       sleepingNow ? 'sleeping now'
         : lastWake ? 'awake for ' + fmtMin(Math.max(0, Math.floor((nowWall - lastWake.endWall) / MS_PER_MIN))) : '',
       [sleepMin ? fmtMin(sleepMin) : '']);
@@ -266,7 +268,7 @@ function buildSummary(events, settings, nowWall) {
   if (en.has('play') || plays.length) {
     const lastPlay = allOf('play')[0];
     const playMin = plays.reduce((a, e) => a + overlapMin(e, dayStartMs, nowWall), 0);
-    pushRow('🧸', 'Play',
+    pushRow('play', '🧸', 'Play',
       lastPlay ? (!lastPlay.endWall ? 'playing now' : agoDur(lastPlay.startWall, nowWall)) : '',
       [playMin ? fmtMin(playMin) : '']);
   }
@@ -275,7 +277,7 @@ function buildSummary(events, settings, nowWall) {
   if (en.has('pump') || pumps.length) {
     const lastPump = allOf('pump')[0];
     const pumpMl = pumps.reduce((a, e) => a + (e.amountMl || 0), 0);
-    pushRow('🥛', 'Pumped',
+    pushRow('pump', '🥛', 'Pumped',
       lastPump ? agoDur(lastPump.startWall, nowWall) : '',
       [pumps.length ? `${pumps.length}×` : '', pumpMl ? `${pumpMl}ml` : '']);
   }
@@ -284,7 +286,7 @@ function buildSummary(events, settings, nowWall) {
   const dirty = todayOf('dirty').length;
   if (en.has('wet') || en.has('dirty') || wet || dirty) {
     const lastNappy = events.find((e) => e.type === 'wet' || e.type === 'dirty');
-    pushRow('💧💩', 'Nappies',
+    pushRow('nappies', '💧💩', 'Nappies',
       lastNappy ? agoDur(lastNappy.startWall, nowWall) : '',
       [(wet || dirty) ? `${wet} wet · ${dirty} dirty` : '']);
   }

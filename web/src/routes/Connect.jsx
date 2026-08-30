@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { pickSpreadsheet } from '../picker.js';
+import { Mark } from '../components/icons.jsx';
 
 export function Connect() {
   const navigate = useNavigate();
@@ -34,7 +35,10 @@ export function Connect() {
 
   return (
     <section id="view-connect">
-      <h1>🐣 Tinyloops</h1>
+      <div className="brand" style={{ marginBottom: 14 }}>
+        <span className="brand-mark"><Mark size={28} color="#f3f1e2" /></span>
+        <h1 style={{ marginBottom: 0 }}>tinyloops</h1>
+      </div>
       <div className="card">
         <h2>Set up your tracker</h2>
         <p>Your data lives in a Google Sheet. Create a new one, or open one

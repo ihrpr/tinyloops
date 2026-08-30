@@ -30,7 +30,11 @@ database_name = "tinyloops"
 # before the first remote deploy. Local dev ignores it.
 database_id = "d4cda45b-1c5c-4d3b-8366-522a7a518cf3"
 
-# Production domain — uncomment once the Worker is ready to go live.
+# Production domain. Beware: with this block present, `wrangler dev` simulates
+# requests as https://tinyloops.app, which makes the auth code build production
+# redirect URIs and Secure cookies on localhost. The dev/test scripts pass
+# `--host localhost:<port>` to keep local dev local — do the same for any
+# ad-hoc `wrangler dev` run.
 [[routes]]
 pattern = "tinyloops.app"
 custom_domain = true

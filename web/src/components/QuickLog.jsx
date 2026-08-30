@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, localNowIso } from '../api.js';
 import { SideSeg } from './SideSeg.jsx';
+import { IconChip } from './icons.jsx';
 
 const numOrNull = (v) => (v.trim() === '' ? null : Number(v));
 
@@ -86,7 +87,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
             className={'type-btn' + (t.key === type ? ' on' : '')}
             onClick={() => setType(t.key)}
           >
-            <span className={'icn t-' + t.key}>{t.emoji}</span>
+            <IconChip k={t.key} />
             <span>{t.short}</span>
           </button>
         ))}

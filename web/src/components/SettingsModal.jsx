@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api.js';
+import { IconChip } from './icons.jsx';
 
 // Shared settings (nursing ml + which activities show), stored in the sheet's
 // Settings tab. types comes from home.types; initial values from home.settings.
@@ -44,7 +45,7 @@ export function SettingsModal({ home, run, onError, onClose }) {
               className={'type-btn' + (selected.has(t.key) ? ' on' : '')}
               onClick={() => toggle(t.key)}
             >
-              <span className={'icn t-' + t.key}>{t.emoji}</span>
+              <IconChip k={t.key} />
               <span>{t.short}</span>
             </button>
           ))}

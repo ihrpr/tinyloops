@@ -7,9 +7,9 @@
   },
   "scripts": {
     "dev:web": "vite",
-    "dev:worker": "wrangler dev",
+    "dev:worker": "wrangler dev --host localhost:8787",
     "build": "vite build",
-    "dev": "vite build --watch & wrangler dev",
+    "dev": "vite build --watch & wrangler dev --host localhost:8787",
     "deploy": "vite build && wrangler deploy",
     "test": "vitest run",
     "test:e2e": "playwright test",

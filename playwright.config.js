@@ -6,7 +6,9 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: 'test/e2e',
   webServer: {
-    command: 'npm run build && npx wrangler dev --port 8788',
+    // --host: with the custom-domain route in wrangler.toml, wrangler dev
+    // would otherwise present requests as https://tinyloops.app
+    command: 'npm run build && npx wrangler dev --port 8788 --host localhost:8788',
     url: 'http://127.0.0.1:8788/?demo',
     reuseExistingServer: false,
     timeout: 120000,
