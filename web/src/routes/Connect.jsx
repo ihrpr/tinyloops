@@ -1,15 +1,23 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { api } from '../api.js';
 import { pickSpreadsheet } from '../picker.js';
 import { Mark } from '../components/icons.jsx';
 
 export function Connect() {
   const navigate = useNavigate();
+  const session = useOutletContext();
   const [status, setStatus] = useState('');
   const [error, setError] = useState(false);
 
   const say = (msg, isError = false) => { setStatus(msg); setError(isError); };
+
+  // Wrong account? This is the only screen between sign-in and the tracker,
+  // so it needs its own way back out.
+  async function signOut() {
+    try { await api('/auth/logout', { method: 'POST' }); } catch { /* signed out anyway */ }
+    location.href = '/signin';
+  }
 
   async function createSheet() {
     try {
@@ -57,6 +65,10 @@ export function Connect() {
           existing tracker sheet” to pick it.</p>
       </div>
       {status && <p className={'status' + (error ? ' error' : '')}>{status}</p>}
+      <div className="footer-actions">
+        {session?.email && <span className="muted">Signed in as {session.email}</span>}
+        <button className="linkish" onClick={signOut}>Sign out</button>
+      </div>
       <p className="legal-links">
         <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
       </p>

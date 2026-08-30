@@ -9,6 +9,9 @@ const AUTH_ERRORS = {
   token_exchange: 'Google sign-in failed. Please try again.',
   token_invalid: 'Google sign-in couldn’t be verified. Please try again.',
   access_denied: 'Sign-in was cancelled.',
+  drive_declined: 'tinyloops needs the “Google Drive files that you use with this app” ' +
+    'permission to reach your tracker sheet. Sign in again and tick that checkbox ' +
+    'on the Google screen.',
 };
 
 export function SignIn() {

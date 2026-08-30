@@ -193,6 +193,13 @@ export async function callback(c) {
       typeof claims.exp !== 'number' || claims.exp * 1000 < now) {
     return c.redirect('/?auth_error=token_invalid');
   }
+  // Granular consent lets users untick the Drive checkbox and still complete
+  // sign-in; without drive.file every Sheets call would 403 with a confusing
+  // "no access" error later. Catch it here, before storing anything.
+  if (!String(tok.scope || '').includes('https://www.googleapis.com/auth/drive.file')) {
+    return c.redirect('/?auth_error=drive_declined');
+  }
+
   const userId = claims.sub;
   const email = claims.email || '';
 
