@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { FakeSheets, makeCtx } from './fake-sheets.js';
 import {
   addEvent, stopEvent, updateEvent, deleteEvent, setSettings,
-  fetchState, gapiFetch,
+  fetchState, gapiFetch, shareSheet,
 } from '../server/sheets.js';
 import { NeedsSignIn } from '../server/auth.js';
 import { isoToWallMs, cellToWallMs } from '../server/time.js';
@@ -198,5 +198,36 @@ describe('gapiFetch — error mapping', () => {
     const ctx = makeCtx(async () => { calls++; return new Response('', { status: 401 }); });
     await expect(gapiFetch(ctx, 'https://x/y')).rejects.toBeInstanceOf(NeedsSignIn);
     expect(calls).toBe(2); // original + one retry
+  });
+});
+
+describe('shareSheet — Drive permission for a partner', () => {
+  it('POSTs a writer permission with a notification email', async () => {
+    let seen = null;
+    const ctx = makeCtx(async (url, opts) => {
+      seen = { url: new URL(url), body: JSON.parse(opts.body), method: opts.method };
+      return new Response('{}', { status: 200 });
+    });
+    await shareSheet(ctx, 'sheet123', 'partner@example.com');
+    expect(seen.method).toBe('POST');
+    expect(seen.url.pathname).toBe('/drive/v3/files/sheet123/permissions');
+    expect(seen.url.searchParams.get('sendNotificationEmail')).toBe('true');
+    expect(seen.url.searchParams.get('emailMessage')).toMatch(/tinyloops\.app/);
+    expect(seen.body).toMatchObject({
+      role: 'writer', type: 'user', emailAddress: 'partner@example.com',
+    });
+  });
+
+  it('400 (bad address) gets a share-specific message; every failure carries .status', async () => {
+    const ctxWith = (status) => makeCtx(async () =>
+      new Response('{"error":{"message":"internal detail"}}', { status }));
+    await expect(shareSheet(ctxWith(400), 's', 'x@y.z'))
+      .rejects.toThrow(/didn't accept that email/);
+    // the /api/share route soft-fails on any non-400 status (Drive share is
+    // best-effort), so the status must survive on the thrown error
+    const err400 = await shareSheet(ctxWith(400), 's', 'x@y.z').catch((e) => e);
+    expect(err400.status).toBe(400);
+    const err403 = await shareSheet(ctxWith(403), 's', 'x@y.z').catch((e) => e);
+    expect(err403.status).toBe(403);
   });
 });

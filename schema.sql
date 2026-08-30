@@ -27,3 +27,22 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 -- for the opportunistic expired-session sweep in requireSession
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+-- Partner invites. An accepted invite is also the standing record that the
+-- invitee reads/writes the sheet through the INVITER's Google credentials
+-- (drive.file grants are per Google account, so the invitee's own token
+-- can't touch the sheet without a Picker round; see requireSheet in
+-- server/index.js).
+CREATE TABLE IF NOT EXISTS invites (
+  id          TEXT PRIMARY KEY,           -- random uuid
+  inviter_id  TEXT NOT NULL REFERENCES users(id),
+  email       TEXT NOT NULL,              -- invited address, lowercased
+  sheet_id    TEXT NOT NULL,              -- inviter's sheet at invite time
+  created_at  INTEGER NOT NULL,           -- unix ms
+  accepted_by TEXT REFERENCES users(id),  -- NULL until accepted
+  accepted_at INTEGER                     -- unix ms
+);
+
+CREATE INDEX IF NOT EXISTS idx_invites_email ON invites(email);
+CREATE INDEX IF NOT EXISTS idx_invites_accepted ON invites(accepted_by, sheet_id);
+CREATE INDEX IF NOT EXISTS idx_invites_inviter ON invites(inviter_id);

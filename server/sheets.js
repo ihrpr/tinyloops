@@ -50,29 +50,38 @@ export async function gapiFetch(c, url, options = {}, isRetry = false) {
   const hook = c.env?.__gapi;
   const token = hook ? hook.token : await accessToken(c, { force: isRetry });
   const doFetch = hook ? hook.fetch : fetch;
+  // `errors` is ours, not fetch's: an optional {status: message} map letting
+  // non-Sheets calls (Drive sharing) override the Sheets-worded defaults.
+  const { errors: errorMap, ...init } = options;
   const resp = await doFetch(url, {
-    ...options,
+    ...init,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...init.headers,
     },
   });
   if (resp.status === 401 && !isRetry) return gapiFetch(c, url, options, true);
   if (resp.status === 401) throw new NeedsSignIn();
   if (!resp.ok) {
     // Don't echo Google's raw API error text to the client (it can leak
-    // internal range/quota detail). Map to fixed, user-safe messages.
-    await resp.body?.cancel?.();
+    // internal range/quota detail). Map to fixed, user-safe messages — but
+    // keep the real reason in the server log for wrangler tail debugging.
+    const detail = await resp.text().catch(() => '');
+    console.error('Google API', resp.status, new URL(url).pathname, detail.slice(0, 600));
+    // errors carry the HTTP status so callers can tell caller-fixable
+    // failures (bad email → 400) from environment ones (API disabled → 403)
+    const fail = (msg) => Object.assign(new SheetError(msg), { status: resp.status });
+    if (errorMap?.[resp.status]) throw fail(errorMap[resp.status]);
     if (resp.status === 403 || resp.status === 404) {
       // 404 because drive.file hides unshared files entirely
-      throw new SheetError("You don't have access to this spreadsheet. " +
+      throw fail("You don't have access to this spreadsheet. " +
         'Ask the owner to share it with you, then pick it again.');
     }
     if (resp.status === 429) {
-      throw new SheetError('Google is rate-limiting requests — please try again in a moment.');
+      throw fail('Google is rate-limiting requests — please try again in a moment.');
     }
-    throw new SheetError('Google Sheets is temporarily unavailable — please try again.');
+    throw fail('Google Sheets is temporarily unavailable — please try again.');
   }
   return resp.json();
 }
@@ -335,6 +344,31 @@ export async function setSettings(c, spreadsheetId, entries) {
       '?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
       { method: 'POST', body: JSON.stringify({ values: appends }) });
   }
+}
+
+/**
+ * Give a partner's Google account Editor access to the sheet file itself,
+ * via the Drive API — allowed under drive.file for files this user already
+ * granted the app (created or picked). This is about DATA ownership, not
+ * app access: the tinyloops link works through the invite + token proxy
+ * even without it, but the Drive share means the partner can always open,
+ * export, or keep the raw sheet independently of tinyloops. Google sends
+ * its own notification email. Throws with .status — the caller treats 400
+ * (bad address) as fatal and anything else as best-effort.
+ */
+export async function shareSheet(c, spreadsheetId, email) {
+  const message = "I'm tracking our baby's day with tinyloops — " +
+    'sign in at tinyloops.app with this Google account to join me.';
+  await gapiFetch(c,
+    `https://www.googleapis.com/drive/v3/files/${enc(spreadsheetId)}/permissions` +
+    `?sendNotificationEmail=true&emailMessage=${encodeURIComponent(message)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ role: 'writer', type: 'user', emailAddress: email }),
+      errors: {
+        400: "Google didn't accept that email address — double-check it and try again.",
+      },
+    });
 }
 
 /** Create a fresh tracker spreadsheet in the user's Drive; returns its ID. */

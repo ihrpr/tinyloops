@@ -50,14 +50,39 @@ export function Connect() {
     }
   }
 
+  async function acceptInvite() {
+    setBusy('accept');
+    try {
+      say('Connecting you to the shared tracker…');
+      await api('/api/invite/accept', { method: 'POST', body: {} });
+      say('Done! Opening your tracker…');
+      location.replace('/');
+    } catch (err) {
+      say(err.message, true);
+      setBusy(null);
+    }
+  }
+
   return (
     <section id="view-connect">
       <div className="brand" style={{ marginBottom: 14 }}>
         <span className="brand-mark"><Mark size={28} color="#f3f1e2" /></span>
         <h1 style={{ marginBottom: 0 }}>tinyloops</h1>
       </div>
+      {session?.invite && (
+        <div className="card invite-card">
+          <h2>You’re invited</h2>
+          <p><b>{session.invite.from}</b> invited you to track your baby’s
+            day together.</p>
+          <button className="primary" disabled={busy !== null} onClick={acceptInvite}>
+            {busy === 'accept' ? 'Connecting…' : 'Accept invitation'}
+          </button>
+          <p className="muted">You’ll share one tracker — every feed, nap and
+            nappy shows up for both of you.</p>
+        </div>
+      )}
       <div className="card">
-        <h2>Set up your tracker</h2>
+        <h2>{session?.invite ? 'Or set up your own' : 'Set up your tracker'}</h2>
         <p>Your data lives in a Google Sheet. Create a new one, or open one
           that was shared with you.</p>
         <button className="primary" disabled={busy !== null} onClick={createSheet}>
@@ -68,14 +93,16 @@ export function Connect() {
         <button className="secondary" disabled={busy !== null} onClick={pickSheet}>
           {busy === 'pick' ? 'Connecting…' : 'Open an existing tracker sheet'}
         </button>
-        <p className="muted">Already tracking, or joining a partner? If a tracker
-          sheet was shared with you, pick it here to connect this device.</p>
+        <p className="muted">Already have a tracker sheet in your Google Drive —
+          from before, or shared with you directly? Pick it here to connect it.</p>
       </div>
       <div className="card">
-        <h2>Sharing with a partner</h2>
-        <p className="muted">Both steps are needed: 1) share the sheet with them as
-          Editor from Google Sheets; 2) they sign in here and use “Open an
-          existing tracker sheet” to pick it.</p>
+        <h2>Tracking together?</h2>
+        <p className="muted">One of you creates the sheet, then invites the other
+          with “Invite partner” inside the tracker — the invitation appears right
+          here, on this screen, once they sign in with the invited email.
+          {session?.invite ? '' : ' Expecting one but not seeing it? Check you’re ' +
+          'signed in with the address your partner invited.'}</p>
       </div>
       {status && <p className={'status' + (error ? ' error' : '')}>{status}</p>}
       <div className="footer-actions">

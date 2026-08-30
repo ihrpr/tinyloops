@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clampInt, safeText, eventParams, ValidationError, MAX_ML } from '../server/validate.js';
+import { clampInt, safeText, eventParams, shareEmail, ValidationError, MAX_ML } from '../server/validate.js';
 
 describe('clampInt', () => {
   it('accepts and rounds in-range values', () => {
@@ -60,5 +60,20 @@ describe('eventParams', () => {
   it('sanitizes a formula-injection note', () => {
     const p = eventParams({ type: 'feed', start: '2026-08-29T14:02', notes: '=IMPORTXML(1,2)' });
     expect(p.notes.startsWith("'=")).toBe(true);
+  });
+});
+
+describe('shareEmail', () => {
+  it('accepts and trims a plausible address', () => {
+    expect(shareEmail(' partner@example.com ')).toBe('partner@example.com');
+    expect(shareEmail('a.b+c@sub.domain.co')).toBe('a.b+c@sub.domain.co');
+  });
+  it('rejects empty, malformed, and oversized input', () => {
+    expect(() => shareEmail('')).toThrow(ValidationError);
+    expect(() => shareEmail(null)).toThrow(ValidationError);
+    expect(() => shareEmail('not-an-email')).toThrow(ValidationError);
+    expect(() => shareEmail('two words@x.com')).toThrow(ValidationError);
+    expect(() => shareEmail('no-tld@host')).toThrow(ValidationError);
+    expect(() => shareEmail('a@b.c' + 'x'.repeat(255))).toThrow(ValidationError);
   });
 });

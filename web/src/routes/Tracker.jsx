@@ -10,6 +10,7 @@ import { DaySummary } from '../components/DaySummary.jsx';
 import { EntryList } from '../components/EntryList.jsx';
 import { EditModal } from '../components/EditModal.jsx';
 import { SettingsModal } from '../components/SettingsModal.jsx';
+import { ShareModal } from '../components/ShareModal.jsx';
 
 export function Tracker() {
   useOutletContext(); // session (kept for parity; data comes from useHome)
@@ -17,6 +18,7 @@ export function Tracker() {
   const showToast = useToast();
   const [editing, setEditing] = useState(null);   // raw event or null
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const err = (msg) => showToast(msg, { error: true });
   const toast = (msg, undo) => showToast(msg, { undo });
@@ -70,6 +72,7 @@ export function Tracker() {
 
       <div className="footer-actions">
         <button className="linkish" onClick={load}>Refresh</button>
+        <button className="linkish" onClick={() => setShareOpen(true)}>Invite partner</button>
         <button className="linkish" onClick={switchSheet}>Switch sheet</button>
         <button className="linkish" onClick={signOut}>Sign out</button>
       </div>
@@ -85,6 +88,7 @@ export function Tracker() {
         <SettingsModal home={home} run={wrappedRun}
           onError={err} onClose={() => setSettingsOpen(false)} />
       )}
+      {shareOpen && <ShareModal onClose={() => setShareOpen(false)} />}
     </Chrome>
   );
 }

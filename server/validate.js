@@ -33,6 +33,16 @@ export function safeText(s, max = MAX_NOTES) {
   return /^[=+\-@|\t\r]/.test(t) ? "'" + t : t;
 }
 
+/** Validate a partner email for sheet sharing. Loose shape check only —
+ *  Google is the real authority on whether the address exists. */
+export function shareEmail(v) {
+  const email = String(v || '').trim();
+  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new ValidationError("Please enter your partner's email address.");
+  }
+  return email;
+}
+
 /** Validate an event payload from the client into sheet-layer params. */
 export function eventParams(body) {
   const type = String(body.type || '');

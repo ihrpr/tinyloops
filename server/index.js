@@ -14,7 +14,7 @@ import { login, callback, logout, requireSession, accessToken, NeedsSignIn } fro
 import * as sheets from './sheets.js';
 import { buildHome, buildStats, buildDay, TYPES, MAX_STATS_DAYS } from './views.js';
 import { isoToWallMs, dayStart, MS_PER_DAY } from './time.js';
-import { eventParams } from './validate.js';
+import { eventParams, shareEmail } from './validate.js';
 import { UserFacingError } from './errors.js';
 import { demoEvents, DEMO_SETTINGS } from './demo.js';
 
@@ -160,8 +160,21 @@ app.use('/api/*', async (c, next) => {
 // Registered after the session middleware (so c.var.user is set) and NOT on
 // /api/me or /api/sheet* (they set/clear the sheet) or /api/picker-config.
 // In demo mode the middleware above returns before reaching here.
+//
+// If this user joined their current sheet by accepting an invite, sheet I/O
+// must run with the INVITER's Google credentials (drive.file grants are per
+// account — being shared the file doesn't let the invitee's own token open
+// it). Scoped to the invited sheet only: if the user later switches to a
+// different sheet, the lookup misses and their own token is used again.
 const requireSheet = async (c, next) => {
-  if (!c.get('user').sheet_id) return noSheet(c);
+  const user = c.get('user');
+  if (!user.sheet_id) return noSheet(c);
+  const inviter = await c.env.DB.prepare(
+    `SELECT u.* FROM invites i JOIN users u ON u.id = i.inviter_id
+     WHERE i.accepted_by = ? AND i.sheet_id = ?
+     ORDER BY i.accepted_at DESC LIMIT 1`)
+    .bind(user.id, user.sheet_id).first();
+  if (inviter && inviter.id !== user.id) c.set('tokenUser', inviter);
   await next();
 };
 app.use('/api/home', requireSheet);
@@ -170,15 +183,32 @@ app.use('/api/days/*', requireSheet);
 app.use('/api/events', requireSheet);
 app.use('/api/events/*', requireSheet);
 app.use('/api/settings', requireSheet);
+app.use('/api/share', requireSheet);
 
 // ---------- session info ----------
 
-app.get('/api/me', (c) => {
+const INVITE_TTL_MS = 30 * MS_PER_DAY;
+
+/** Newest live (unaccepted, unexpired) invite addressed to this email. */
+function pendingInvite(c, email) {
+  return c.env.DB.prepare(
+    `SELECT i.*, u.email AS inviter_email FROM invites i
+     JOIN users u ON u.id = i.inviter_id
+     WHERE i.email = ? AND i.accepted_by IS NULL AND i.created_at > ?
+     ORDER BY i.created_at DESC LIMIT 1`)
+    .bind(email.toLowerCase(), Date.now() - INVITE_TTL_MS).first();
+}
+
+app.get('/api/me', async (c) => {
   const user = c.get('user');
+  // surface a waiting invite only while there's no sheet yet — that's the
+  // moment the Connect screen can offer one-tap accept
+  const invite = user.sheet_id ? null : await pendingInvite(c, user.email);
   return c.json({
     email: user.email,
     hasSheet: Boolean(user.sheet_id),
     sheetUrl: user.sheet_id ? sheets.sheetUrl(user.sheet_id) : null,
+    invite: invite ? { from: invite.inviter_email } : null,
   });
 });
 
@@ -243,6 +273,64 @@ app.put('/api/settings', async (c) => {
     ['enabled_types', Object.keys(TYPES).filter((k) => list.includes(k)).join(',')],
   ]);
   return c.json({ home: await freshHome(c) });
+});
+
+// ---------- partner sharing ----------
+
+app.post('/api/share', async (c) => {
+  const user = c.get('user');
+  const email = shareEmail((await c.req.json()).email);
+  if (email.toLowerCase() === user.email.toLowerCase()) {
+    throw new UserFacingError("That's your own account — enter your partner's email.");
+  }
+  const pending = await c.env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM invites WHERE inviter_id = ? AND accepted_by IS NULL')
+    .bind(user.id).first();
+  if (pending.n >= 10) {
+    throw new UserFacingError('Too many open invitations — ask your partner to accept one first.');
+  }
+
+  // Best-effort Drive share so the partner's own Google account can open the
+  // raw sheet too. A 400 is a bad address and fails the invite; anything
+  // else (e.g. Drive API unavailable) must not block the in-app invite,
+  // which works through the token proxy regardless.
+  let driveShared = true;
+  try {
+    await sheets.shareSheet(c, user.sheet_id, email);
+  } catch (err) {
+    if (err.status === 400) throw err;
+    driveShared = false;
+  }
+
+  // One live invite per (inviter, email): re-inviting replaces the old one.
+  const now = Date.now();
+  await c.env.DB.prepare(
+    'DELETE FROM invites WHERE inviter_id = ? AND email = ? AND accepted_by IS NULL')
+    .bind(user.id, email.toLowerCase()).run();
+  await c.env.DB.prepare(
+    `INSERT INTO invites (id, inviter_id, email, sheet_id, created_at)
+     VALUES (?, ?, ?, ?, ?)`)
+    .bind(crypto.randomUUID(), user.id, email.toLowerCase(), user.sheet_id, now).run();
+  return c.json({ ok: true, driveShared });
+});
+
+app.post('/api/invite/accept', async (c) => {
+  const user = c.get('user');
+  if (user.sheet_id) {
+    throw new UserFacingError('This account is already connected to a tracker sheet.');
+  }
+  const invite = await pendingInvite(c, user.email);
+  if (!invite) {
+    throw new UserFacingError('No open invitation for this account — ask your partner to invite ' +
+      user.email + ', or pick the shared sheet below.');
+  }
+  const now = Date.now();
+  await c.env.DB.prepare(
+    'UPDATE invites SET accepted_by = ?, accepted_at = ? WHERE id = ? AND accepted_by IS NULL')
+    .bind(user.id, now, invite.id).run();
+  await c.env.DB.prepare('UPDATE users SET sheet_id = ? WHERE id = ?')
+    .bind(invite.sheet_id, user.id).run();
+  return c.json({ ok: true });
 });
 
 // ---------- sheet connect / create / switch ----------

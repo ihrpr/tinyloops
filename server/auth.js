@@ -12,6 +12,7 @@
 
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { MS_PER_DAY, MS_PER_HOUR } from './time.js';
+import { UserFacingError } from './errors.js';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -282,11 +283,24 @@ export class NeedsSignIn extends Error {
 }
 
 /**
- * A live access token for the user — cached in the users row, silently
- * re-minted from the refresh token when stale.
+ * A live access token — cached in the users row, silently re-minted from the
+ * refresh token when stale.
+ *
+ * Normally this is the session user's token. When a partner joined through
+ * an invite, requireSheet sets `tokenUser` to the inviter's row and the
+ * sheet is accessed with the inviter's credentials instead (drive.file
+ * grants are per Google account, so the partner's own token can't see the
+ * sheet). In that proxied case a dead refresh token is the INVITER's problem
+ * — throwing NeedsSignIn would bounce the partner into a re-login that fixes
+ * nothing, so it surfaces as a plain message instead.
  */
 export async function accessToken(c, { force = false } = {}) {
-  const user = c.get('user');
+  const user = c.get('tokenUser') || c.get('user');
+  const proxied = user !== c.get('user');
+  const deadToken = () => proxied
+    ? new UserFacingError("The sheet owner's Google connection has expired — " +
+      'ask them to open tinyloops and sign in again.')
+    : new NeedsSignIn();
   const now = Date.now();
   if (!force && user.access_token_enc && user.access_token_expires > now) {
     try {
@@ -295,7 +309,7 @@ export async function accessToken(c, { force = false } = {}) {
       // unreadable cached token — fall through and mint a fresh one
     }
   }
-  if (!user.refresh_token_enc) throw new NeedsSignIn();
+  if (!user.refresh_token_enc) throw deadToken();
   let refreshToken;
   try {
     refreshToken = await decrypt(c.env, user.refresh_token_enc);
@@ -304,7 +318,7 @@ export async function accessToken(c, { force = false } = {}) {
     // stored token is unusable, so require a fresh interactive sign-in
     // rather than surfacing an opaque 500 forever.
     await clearTokens(c.env, user.id);
-    throw new NeedsSignIn();
+    throw deadToken();
   }
   const resp = await fetch(TOKEN_URL, {
     method: 'POST',
@@ -326,7 +340,7 @@ export async function accessToken(c, { force = false } = {}) {
     const body = await resp.json().catch(() => ({}));
     if (body.error === 'invalid_grant') {
       await clearTokens(c.env, user.id);
-      throw new NeedsSignIn();
+      throw deadToken();
     }
     throw new Error(`Google token refresh failed (${resp.status})`);
   }
