@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { Link, useNavigate, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { api } from '../api.js';
 import { pickSpreadsheet } from '../picker.js';
 import { Mark } from '../components/icons.jsx';
 
 export function Connect() {
-  const navigate = useNavigate();
   const session = useOutletContext();
   const [status, setStatus] = useState('');
   const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(null); // 'create' | 'pick' | null
 
   const say = (msg, isError = false) => { setStatus(msg); setError(isError); };
 
@@ -19,25 +19,34 @@ export function Connect() {
     location.href = '/signin';
   }
 
+  // On success we do a full navigation, not a client-side navigate(): the
+  // root loader cached hasSheet:false at page load, and a soft navigation
+  // would not re-run it — the shell would bounce straight back here.
   async function createSheet() {
+    setBusy('create');
     try {
-      say('Creating your tracker sheet…');
+      say('Creating your tracker sheet — this takes a few seconds…');
       await api('/api/sheet', { method: 'POST' });
-      navigate('/', { replace: true });
+      say('Done! Opening your tracker…');
+      location.replace('/');
     } catch (err) {
       say('Could not create the sheet: ' + err.message, true);
+      setBusy(null);
     }
   }
 
   async function pickSheet() {
+    setBusy('pick');
     try {
       const picked = await pickSpreadsheet();
-      if (!picked) return;
+      if (!picked) { setBusy(null); say(''); return; }
       say('Checking the sheet…');
       await api('/api/sheet', { method: 'PUT', body: { spreadsheetId: picked } });
-      navigate('/', { replace: true });
+      say('Done! Opening your tracker…');
+      location.replace('/');
     } catch (err) {
       say(err.message, true);
+      setBusy(null);
     }
   }
 
@@ -51,10 +60,14 @@ export function Connect() {
         <h2>Set up your tracker</h2>
         <p>Your data lives in a Google Sheet. Create a new one, or open one
           that was shared with you.</p>
-        <button className="primary" onClick={createSheet}>Create a new tracker sheet</button>
+        <button className="primary" disabled={busy !== null} onClick={createSheet}>
+          {busy === 'create' ? 'Creating your sheet…' : 'Create a new tracker sheet'}
+        </button>
         <p className="muted">We&apos;ll create an empty spreadsheet called “Tinyloops”
           in your Google Drive. You can open, export or delete it at any time.</p>
-        <button className="secondary" onClick={pickSheet}>Open an existing tracker sheet</button>
+        <button className="secondary" disabled={busy !== null} onClick={pickSheet}>
+          {busy === 'pick' ? 'Connecting…' : 'Open an existing tracker sheet'}
+        </button>
         <p className="muted">Already tracking, or joining a partner? If a tracker
           sheet was shared with you, pick it here to connect this device.</p>
       </div>
