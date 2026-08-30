@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Mark, IconChip } from '../components/icons.jsx';
 
 const IN_APP_BROWSER = /FBAN|FBAV|Instagram|Line\/|GSA\/|; wv\)/.test(navigator.userAgent);
@@ -72,6 +73,10 @@ export function SignIn() {
           <li>Choose <b>Add to Home screen</b></li>
         </ol>
       </details>
+
+      <p className="legal-links">
+        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
+      </p>
     </section>
   );
 }

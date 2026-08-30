@@ -560,6 +560,16 @@ details.platform[open] summary::after { transform: rotate(225deg); }
   }
 }
 
+/* ---------- legal pages & footer links ---------- */
+
+.legal { max-width: 560px; }
+.legal h2 { margin-top: 26px; color: var(--ink); text-transform: none; letter-spacing: 0; font-size: 16px; }
+.legal p { color: var(--ink); font-size: 14.5px; line-height: 1.6; }
+.legal a { color: var(--accent-strong); }
+.legal-links { text-align: center; margin-top: 22px; font-size: 13px; color: var(--muted); }
+.legal-links a { color: var(--muted); text-decoration-color: var(--line); }
+.legal-links a:hover { color: var(--ink); }
+
 /* settings */
 .top-actions { display: flex; align-items: center; gap: 2px; }
 .icon-btn { background: none; padding: 8px; border-radius: 10px; color: var(--muted); display: grid; place-items: center; }

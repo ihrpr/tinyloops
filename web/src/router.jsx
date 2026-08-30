@@ -6,6 +6,7 @@ import { SignIn } from './routes/SignIn.jsx';
 import { Connect } from './routes/Connect.jsx';
 import { Tracker } from './routes/Tracker.jsx';
 import { Stats } from './routes/Stats.jsx';
+import { Privacy, Terms } from './routes/Legal.jsx';
 
 // Resolve the session once at the app root: decides sign-in vs connect vs
 // the tracker. The App shell reads this (via useOutletContext) and redirects
@@ -21,6 +22,11 @@ async function rootLoader() {
 }
 
 export const router = createBrowserRouter([
+  // Public legal pages — outside the App shell so they load without any
+  // session lookup or sign-in redirect (they're linked from the Google
+  // OAuth consent screen).
+  { path: '/privacy', element: <Privacy />, errorElement: <ErrorScreen /> },
+  { path: '/terms', element: <Terms />, errorElement: <ErrorScreen /> },
   {
     path: '/',
     element: <App />,

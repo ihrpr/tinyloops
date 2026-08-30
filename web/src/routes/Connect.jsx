@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { pickSpreadsheet } from '../picker.js';
 import { Mark } from '../components/icons.jsx';
@@ -57,6 +57,9 @@ export function Connect() {
           existing tracker sheet” to pick it.</p>
       </div>
       {status && <p className={'status' + (error ? ' error' : '')}>{status}</p>}
+      <p className="legal-links">
+        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
+      </p>
     </section>
   );
 }

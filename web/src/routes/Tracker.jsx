@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { api, DEMO } from '../api.js';
 import { useHome } from '../useHome.js';
 import { useToast } from '../components/Toast.jsx';
@@ -73,6 +73,9 @@ export function Tracker() {
         <button className="linkish" onClick={switchSheet}>Switch sheet</button>
         <button className="linkish" onClick={signOut}>Sign out</button>
       </div>
+      <p className="legal-links">
+        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
+      </p>
 
       {editing && (
         <EditModal raw={editing} types={home.types} run={wrappedRun}
