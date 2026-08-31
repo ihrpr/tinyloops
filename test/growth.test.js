@@ -31,6 +31,17 @@ describe('centile math', () => {
       .toBe('3rd');
   });
 
+  it('values on the UK-WHO ⅔-SD lines label as the red-book centiles', () => {
+    expect(centileLabel('boy', 'weight', 365, referenceValue('boy', 'weight', 365, 4 / 3)))
+      .toBe('91st');
+    expect(centileLabel('boy', 'weight', 365, referenceValue('boy', 'weight', 365, -4 / 3)))
+      .toBe('9th');
+    expect(centileLabel('girl', 'length', 200, referenceValue('girl', 'length', 200, 2)))
+      .toBe('98th');
+    expect(centileLabel('girl', 'weight', 200, referenceValue('girl', 'weight', 200, -2 / 3)))
+      .toBe('25th');
+  });
+
   it('clamps extreme values to <1st / >99th', () => {
     expect(centileLabel('boy', 'weight', 30, 1.5)).toBe('<1st');
     expect(centileLabel('boy', 'weight', 30, 9)).toBe('>99th');
@@ -70,11 +81,14 @@ describe('buildGrowth', () => {
     expect(point.x).toBeCloseTo(92 / 30.4375, 1); // 92 days old
     expect(point.tip).toMatch(/1 Aug · 5.4 kg · \d+\w+ centile/);
     // measurement rows carry curve values so the centile lines stay unbroken
-    expect(point.p50).toBeGreaterThan(point.p3);
-    // every row has all five centiles, ascending
+    expect(point.p50).toBeGreaterThan(point.p2);
+    // every row has all nine UK-WHO centiles, ascending
+    const keys = ['p004', 'p2', 'p9', 'p25', 'p50', 'p75', 'p91', 'p98', 'p996'];
+    expect(w.centiles.map((c) => c.key)).toEqual(keys);
     for (const r of w.data) {
-      expect(r.p3).toBeLessThan(r.p15);
-      expect(r.p85).toBeLessThan(r.p97);
+      for (let i = 1; i < keys.length; i++) {
+        expect(r[keys[i - 1]]).toBeLessThan(r[keys[i]]);
+      }
     }
     expect(w.latest.text).toMatch(/5.4 kg .* centile at 3 months/); // 92 days
     expect(g.charts.length.unit).toBe('cm');
@@ -90,7 +104,7 @@ describe('buildGrowth', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].y).toBe(3.2);
     expect(rows[0].tip).toMatch(/centile/);
-    expect(rows[0].p50).toBeGreaterThan(rows[0].p3); // still a curve row too
+    expect(rows[0].p50).toBeGreaterThan(rows[0].p004); // still a curve row too
     // and never two rows sharing any x anywhere
     const xs = g.charts.weight.data.map((r) => r.x);
     expect(new Set(xs).size).toBe(xs.length);

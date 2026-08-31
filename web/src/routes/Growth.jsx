@@ -86,10 +86,13 @@ export function Growth() {
               onAdd={(body, done) => submit('/api/growth', 'POST', body, done)} />
             <Entries entries={data.entries} busy={busy}
               onDelete={(id) => submit('/api/growth/' + id, 'DELETE')} />
-            <p className="muted table-note">Curves are the WHO Child Growth
-              Standards (3rd–97th centiles) for {data.profile.sex}s. Healthy
-              babies grow along very different lines — if anything worries
-              you, ask your midwife, health visitor or doctor.</p>
+            <p className="muted table-note">Curves are the nine UK-WHO centile
+              lines (0.4th–99.6th) of the red-book growth charts, drawn from
+              the WHO Child Growth Standards for {data.profile.sex}s. (The red
+              book plots the first two weeks on separate birth data, so very
+              early centiles can differ slightly.) Healthy babies grow along
+              very different lines — if anything worries you, ask your
+              midwife, health visitor or doctor.</p>
           </>
         )}
       </div>
@@ -142,7 +145,7 @@ function ChartCard({ title, field, example, step, chart, busy, onAdd }) {
       {chart.latest && <div className="trend-note">{chart.latest.text}</div>}
       {chart.empty && (
         <div className="empty-note">No {title.toLowerCase()} logged yet — the
-          curves show the WHO 3rd–97th centile range.</div>
+          curves show the UK-WHO 0.4th–99.6th centile range.</div>
       )}
       <GrowthChart chart={chart} />
       <div className="measure-form">

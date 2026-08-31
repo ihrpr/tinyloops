@@ -36,8 +36,8 @@ export function GrowthChart({ chart }) {
           <Tooltip content={<GrowthTooltip />} cursor={{ stroke: 'var(--line)' }} />
           {chart.centiles.map((cnt) => (
             <Line key={cnt.key} dataKey={cnt.key} stroke="var(--muted)"
-              strokeWidth={cnt.key === 'p50' ? 1.7 : 1}
-              strokeOpacity={cnt.key === 'p50' ? 0.85 : 0.5}
+              strokeWidth={cnt.key === 'p50' ? 1.7 : 0.9}
+              strokeOpacity={cnt.key === 'p50' ? 0.85 : 0.45}
               dot={false} activeDot={false} isAnimationActive={false}
               label={endLabel(last, cnt.label)} />
           ))}

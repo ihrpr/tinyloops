@@ -17,13 +17,21 @@ const DAYS_PER_MONTH = 30.4375; // the WHO convention used by the tables
 // standing height at day 731, so the baby charts stop just before the seam.
 export const MAX_AGE_DAYS = 730;
 
-// The five reference centiles WHO's printed charts draw, as z-scores.
+// The nine centile lines of the UK-WHO (RCPCH) growth charts — the red
+// book presentation UK parents and health visitors read — spaced exactly
+// two-thirds of a standard deviation apart. The curves themselves are the
+// same WHO standards; only which lines get drawn differs from WHO's own
+// 3rd/15th/50th/85th/97th charts.
 const CENTILES = [
-  { key: 'p3', label: '3rd', z: -1.880794 },
-  { key: 'p15', label: '15th', z: -1.036433 },
+  { key: 'p004', label: '0.4th', z: -8 / 3 },
+  { key: 'p2', label: '2nd', z: -2 },
+  { key: 'p9', label: '9th', z: -4 / 3 },
+  { key: 'p25', label: '25th', z: -2 / 3 },
   { key: 'p50', label: '50th', z: 0 },
-  { key: 'p85', label: '85th', z: 1.036433 },
-  { key: 'p97', label: '97th', z: 1.880794 },
+  { key: 'p75', label: '75th', z: 2 / 3 },
+  { key: 'p91', label: '91st', z: 4 / 3 },
+  { key: 'p98', label: '98th', z: 2 },
+  { key: 'p996', label: '99.6th', z: 8 / 3 },
 ];
 
 /** LMS at an exact age, interpolated linearly between the sampled rows. */
@@ -173,7 +181,7 @@ export function buildGrowth(measurements, settings, nowWall) {
     }
     data.sort((a, b) => a.x - b.x);
 
-    const ys = data.flatMap((r) => [r.p3, r.p97, r.y]).filter((v) => v != null);
+    const ys = data.flatMap((r) => [r.p004, r.p996, r.y]).filter((v) => v != null);
     // y ticks on a "nice" step so the axis reads 45/50/55, not 45/52/59
     const span = Math.max(...ys) - Math.min(...ys);
     const step = span > 15 ? 5 : span > 6 ? 2 : 1;
