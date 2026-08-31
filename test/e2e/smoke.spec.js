@@ -12,7 +12,9 @@ test('demo log view renders the tracker', async ({ page }) => {
 
 test('demo stats view renders charts with actual bars', async ({ page }) => {
   await page.goto('/stats?demo');
-  await expect(page.locator('.stat-table')).toBeVisible();
+  // .first(): the foods-tried list is a second .stat-table once data lands
+  await expect(page.locator('.stat-table').first()).toBeVisible();
+  await expect(page.locator('.foods-table')).toBeVisible();
   // Recharts must have drawn real bar geometry, not just empty axes
   // (toBeAttached waits for the stats fetch to land and the bars to mount)
   await expect(page.locator('.recharts-bar-rectangle').first()).toBeAttached();
@@ -25,7 +27,7 @@ test('demo growth view renders WHO curves, points and the table', async ({ page 
   await expect(page.locator('.recharts-line-dot').first()).toBeAttached();
   await expect(page.getByRole('heading', { name: 'Weight (kg)' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Height (cm)' })).toBeVisible();
-  await expect(page.locator('.stat-table')).toBeVisible();
+  await expect(page.locator('.stat-table').first()).toBeVisible();
   await expect(page.getByText(/centile at/).first()).toBeVisible();
 });
 
