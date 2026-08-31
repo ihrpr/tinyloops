@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { clampInt, safeText, eventParams, shareEmail, ValidationError, MAX_ML } from '../server/validate.js';
+import {
+  clampInt, safeText, eventParams, shareEmail, growthParams, profileParams,
+  ValidationError, MAX_ML,
+} from '../server/validate.js';
+import { isoToWallMs } from '../server/time.js';
 
 describe('clampInt', () => {
   it('accepts and rounds in-range values', () => {
@@ -75,5 +79,54 @@ describe('shareEmail', () => {
     expect(() => shareEmail('two words@x.com')).toThrow(ValidationError);
     expect(() => shareEmail('no-tld@host')).toThrow(ValidationError);
     expect(() => shareEmail('a@b.c' + 'x'.repeat(255))).toThrow(ValidationError);
+  });
+});
+
+describe('growthParams', () => {
+  const NOW = isoToWallMs('2026-08-31T10:00');
+
+  it('accepts a date plus either measure, rounding to sane precision', () => {
+    const p = growthParams({ date: '2026-08-30', weightKg: '5.4266', heightCm: '' }, NOW);
+    expect(p.weightKg).toBe(5.427);
+    expect(p.heightCm).toBeNull();
+    expect(p.dateWall).toBe(isoToWallMs('2026-08-30'));
+    expect(growthParams({ date: '2026-08-30', heightCm: 58.44 }, NOW).heightCm).toBe(58.4);
+  });
+
+  it('rejects a missing or future date', () => {
+    expect(() => growthParams({ weightKg: 5 }, NOW)).toThrow(/measurement date/);
+    expect(() => growthParams({ date: '2026-09-02', weightKg: 5 }, NOW)).toThrow(/future/);
+  });
+
+  it('rejects wrong-unit values instead of silently dropping them', () => {
+    expect(() => growthParams({ date: '2026-08-30', weightKg: 5400 }, NOW)) // grams
+      .toThrow(/kilograms/);
+    expect(() => growthParams({ date: '2026-08-30', heightCm: 0.58 }, NOW)) // metres
+      .toThrow(/centimetres/);
+  });
+
+  it('requires at least one measure and sanitizes notes', () => {
+    expect(() => growthParams({ date: '2026-08-30' }, NOW)).toThrow(/weight, a height/);
+    const p = growthParams({ date: '2026-08-30', weightKg: 5, notes: '=SUM(A1)' }, NOW);
+    expect(p.notes.startsWith("'=")).toBe(true);
+  });
+});
+
+describe('profileParams', () => {
+  const NOW = isoToWallMs('2026-08-31T10:00');
+
+  it('accepts a plausible birth date and sex', () => {
+    expect(profileParams({ birthDate: '2026-05-01', sex: 'girl' }, NOW))
+      .toEqual({ birthDate: '2026-05-01', sex: 'girl' });
+  });
+
+  it('rejects missing/future/ancient birth dates and unknown sex', () => {
+    expect(() => profileParams({ sex: 'boy' }, NOW)).toThrow(ValidationError);
+    expect(() => profileParams({ birthDate: '2026-09-15', sex: 'boy' }, NOW))
+      .toThrow(/birth date/);
+    expect(() => profileParams({ birthDate: '2015-01-01', sex: 'boy' }, NOW))
+      .toThrow(/looks wrong/);
+    expect(() => profileParams({ birthDate: '2026-05-01', sex: 'other' }, NOW))
+      .toThrow(/girl or boy/);
   });
 });

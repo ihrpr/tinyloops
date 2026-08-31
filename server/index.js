@@ -13,10 +13,11 @@ import { Hono } from 'hono';
 import { login, callback, logout, requireSession, accessToken, NeedsSignIn } from './auth.js';
 import * as sheets from './sheets.js';
 import { buildHome, buildStats, buildDay, TYPES, MAX_STATS_DAYS } from './views.js';
+import { buildGrowth } from './growth.js';
 import { isoToWallMs, dayStart, MS_PER_DAY } from './time.js';
-import { eventParams, shareEmail } from './validate.js';
+import { eventParams, shareEmail, growthParams, profileParams } from './validate.js';
 import { UserFacingError } from './errors.js';
-import { demoEvents, DEMO_SETTINGS } from './demo.js';
+import { demoEvents, demoGrowth, DEMO_SETTINGS } from './demo.js';
 
 const app = new Hono();
 
@@ -153,6 +154,10 @@ app.use('/api/*', async (c, next) => {
     if (date == null) return c.json({ error: 'Invalid date.' }, 400);
     return c.json(buildDay(events, date, now));
   }
+  if (path === '/api/growth') {
+    const g = demoGrowth(now);
+    return c.json(buildGrowth(g.measurements, { ...DEMO_SETTINGS, ...g.settings }, now));
+  }
   return c.json({ error: 'Not available in demo mode.' }, 404);
 });
 
@@ -184,6 +189,8 @@ app.use('/api/events', requireSheet);
 app.use('/api/events/*', requireSheet);
 app.use('/api/settings', requireSheet);
 app.use('/api/share', requireSheet);
+app.use('/api/growth', requireSheet);
+app.use('/api/growth/*', requireSheet);
 
 // ---------- session info ----------
 
@@ -230,6 +237,42 @@ app.get('/api/days/:date', async (c) => {
   if (date == null) return c.json({ error: 'Invalid date.' }, 400);
   const state = await loadState(c);
   return c.json(buildDay(state.events, dayStart(date), nowWall(c)));
+});
+
+// ---------- growth (measurements + WHO centile charts) ----------
+
+async function freshGrowth(c) {
+  const state = await sheets.fetchGrowthState(c, c.get('user').sheet_id);
+  const growth = buildGrowth(state.measurements, state.settings, nowWall(c));
+  // a hand-made 'Growth' tab we refuse to touch — the UI explains why
+  // adding measurements won't work until it's renamed or cleared
+  if (state.foreignGrowth) growth.foreignTab = true;
+  return growth;
+}
+
+app.get('/api/growth', async (c) => c.json(await freshGrowth(c)));
+
+app.post('/api/growth', async (c) => {
+  const user = c.get('user');
+  const p = growthParams(await c.req.json(), requireNow(c));
+  const id = await sheets.addMeasurement(c, user.sheet_id, p, user.email);
+  return c.json({ id, growth: await freshGrowth(c) });
+});
+
+app.delete('/api/growth/:id', async (c) => {
+  await sheets.deleteMeasurement(c, c.get('user').sheet_id, c.req.param('id'));
+  return c.json({ growth: await freshGrowth(c) });
+});
+
+// the profile (birth date + sex) lives in the sheet's Settings tab, so both
+// partners share it — it's what places measurements on the WHO age axis
+app.put('/api/growth/profile', async (c) => {
+  const p = profileParams(await c.req.json(), requireNow(c));
+  await sheets.setSettings(c, c.get('user').sheet_id, [
+    ['baby_birth_date', p.birthDate],
+    ['baby_sex', p.sex],
+  ]);
+  return c.json({ growth: await freshGrowth(c) });
 });
 
 // ---------- writes (each returns a fresh home payload) ----------

@@ -5,7 +5,8 @@
  */
 
 import { DEFAULT_SETTINGS } from './sheets.js';
-import { dayStart } from './time.js';
+import { referenceValue } from './growth.js';
+import { dayStart, wallMsToDate, MS_PER_DAY } from './time.js';
 
 export const DEMO_SETTINGS = { ...DEFAULT_SETTINGS };
 
@@ -20,6 +21,30 @@ export function demoEvents(nowWall) {
   const events = generateDemo(nowWall);
   cache = { day, events };
   return events;
+}
+
+/**
+ * Sample growth data: a girl born ~4 months ago, measured every few weeks,
+ * tracking just under the median and drifting gently up. Values are read off
+ * the real WHO curves so the demo chart is honest about what the feature
+ * shows.
+ */
+export function demoGrowth(nowWall) {
+  const birth = dayStart(nowWall) - 130 * MS_PER_DAY;
+  const days = [0, 4, 14, 28, 42, 61, 84, 112, 126];
+  const measurements = days.map((d, i) => ({
+    id: 'demo-g' + i,
+    dateWall: birth + d * MS_PER_DAY,
+    weightKg: Math.round(referenceValue('girl', 'weight', d, -0.5 + i * 0.07) * 100) / 100,
+    heightCm: i % 2 === 0
+      ? Math.round(referenceValue('girl', 'length', d, -0.3 + i * 0.05) * 10) / 10 : null,
+    notes: '',
+    loggedBy: 'demo@example.com',
+  }));
+  return {
+    measurements,
+    settings: { baby_birth_date: wallMsToDate(birth), baby_sex: 'girl' },
+  };
 }
 
 function generateDemo(nowWall) {

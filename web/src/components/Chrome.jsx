@@ -29,6 +29,7 @@ export function Chrome({ topDate, sheetUrl, onSettings, children }) {
       <div className="tabs">
         <NavLink to="/" end className={({ isActive }) => 'tab' + (isActive ? ' on' : '')}>Log</NavLink>
         <NavLink to="/stats" className={({ isActive }) => 'tab' + (isActive ? ' on' : '')}>Stats</NavLink>
+        <NavLink to="/growth" className={({ isActive }) => 'tab' + (isActive ? ' on' : '')}>Growth</NavLink>
       </div>
 
       {children}

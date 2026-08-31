@@ -25,7 +25,9 @@ function parseRange(a1) {
 }
 
 export class FakeSheets {
-  constructor(spreadsheetId, { log = [], settings = [] } = {}) {
+  // growth: null = the tab doesn't exist (a sheet from before growth
+  // tracking); [] or rows = it exists with those data rows
+  constructor(spreadsheetId, { log = [], settings = [], growth = null } = {}) {
     this.id = spreadsheetId;
     // rows are arrays of up to 10 cells; row 1 is the header
     this.tabs = {
@@ -33,11 +35,17 @@ export class FakeSheets {
         'side', 'amount_ml', 'notes', 'logged_by', 'formula_ml'], ...log],
       Settings: settings.slice(),
     };
+    if (growth) {
+      this.tabs.Growth = [['id', 'date', 'weight_kg', 'height_cm', 'notes', 'logged_by'],
+        ...growth];
+    }
+    this.sheetIds = { Log: 111, Settings: 222, Growth: 333 };
     this.logSheetId = 111;
     this.requests = []; // audit trail of every write, for assertions
   }
 
   logRows() { return this.tabs.Log.slice(1); } // data rows only
+  growthRows() { return (this.tabs.Growth || []).slice(1); }
 
   _readRange(a1) {
     const { tab, c1, r1, c2, r2 } = parseRange(a1);
@@ -71,29 +79,50 @@ export class FakeSheets {
     const path = decodeURIComponent(u.pathname);
     const json = (obj) => new Response(JSON.stringify(obj), { status: 200 });
 
+    // spreadsheets.create: fresh workbook with the requested tabs, in order
+    if (method === 'POST' && path.endsWith('/v4/spreadsheets')) {
+      this.requests.push({ op: 'create', body });
+      this.tabs = {};
+      const sheets = (body.sheets || []).map((s, i) => {
+        this.tabs[s.properties.title] = [];
+        return { properties: { title: s.properties.title,
+          sheetId: this.sheetIds[s.properties.title] ?? 900 + i } };
+      });
+      return json({ spreadsheetId: this.id, sheets });
+    }
+
+    // like the real API, any read naming a missing tab is a 400
+    const badRange = (a1) => !this.tabs[a1.split('!')[0]];
+    const err400 = () => new Response(
+      JSON.stringify({ error: { message: 'Unable to parse range' } }), { status: 400 });
+
     // metadata: /{id}?fields=sheets.properties[.title]
     if (method === 'GET' && /\/spreadsheets\/[^/]+$/.test(path) && u.searchParams.get('fields')) {
-      return json({ sheets: [
-        { properties: { title: 'Log', sheetId: this.logSheetId } },
-        { properties: { title: 'Settings', sheetId: 222 } },
-      ] });
+      return json({ sheets: Object.keys(this.tabs).map((title) => (
+        { properties: { title, sheetId: this.sheetIds[title] } })) });
     }
     // values:batchGet
     if (method === 'GET' && path.endsWith('/values:batchGet')) {
       const ranges = u.searchParams.getAll('ranges');
+      if (ranges.some(badRange)) return err400();
       return json({ valueRanges: ranges.map((r) => ({ values: this._readRange(r) })) });
     }
     // single-range values GET: /{id}/values/{a1}
     if (method === 'GET' && path.includes('/values/')) {
       const a1 = path.split('/values/')[1];
+      if (badRange(a1)) return err400();
       return json({ values: this._readRange(a1) });
     }
-    // :append — target tab comes from the range in the path
+    // :append — target tab comes from the range in the path. Like the real
+    // API, rows land after the last row of the table in the range, but never
+    // above the range's start row (an empty tab + range A2:F → row 2, not 1).
     if (method === 'POST' && path.endsWith(':append')) {
       const a1 = path.split('/values/')[1].replace(':append', '');
-      const tab = a1.split('!')[0];
+      const { tab, r1 } = parseRange(a1);
       this.requests.push({ op: 'append', tab, values: body.values });
-      for (const row of body.values) this.tabs[tab].push(row.slice());
+      const rows = this.tabs[tab];
+      while (rows.length < r1 - 1) rows.push([]);
+      for (const row of body.values) rows.push(row.slice());
       return json({});
     }
     // values:batchUpdate (write ranges)
@@ -109,16 +138,26 @@ export class FakeSheets {
       this._writeRange(a1, body.values);
       return json({});
     }
-    // top-level :batchUpdate (deleteDimension)
+    // top-level :batchUpdate (deleteDimension, addSheet, repeatCell)
     if (method === 'POST' && /:batchUpdate$/.test(path) && !path.includes('/values')) {
       this.requests.push({ op: 'batchUpdate', requests: body.requests });
+      const replies = [];
       for (const req of body.requests) {
         if (req.deleteDimension) {
-          const { startIndex, endIndex } = req.deleteDimension.range;
-          this.tabs.Log.splice(startIndex, endIndex - startIndex);
+          const { sheetId, startIndex, endIndex } = req.deleteDimension.range;
+          const tab = Object.keys(this.sheetIds).find((t) => this.sheetIds[t] === sheetId);
+          this.tabs[tab].splice(startIndex, endIndex - startIndex);
         }
+        if (req.addSheet) {
+          const { title } = req.addSheet.properties;
+          if (this.tabs[title]) return err400();
+          this.tabs[title] = [];
+          replies.push({ addSheet: { properties: { sheetId: this.sheetIds[title] ?? 999 } } });
+          continue;
+        }
+        replies.push({}); // repeatCell etc: audit only
       }
-      return json({});
+      return json({ replies });
     }
     return new Response('unhandled ' + method + ' ' + path, { status: 500 });
   };

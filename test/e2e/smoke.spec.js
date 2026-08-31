@@ -18,6 +18,17 @@ test('demo stats view renders charts with actual bars', async ({ page }) => {
   await expect(page.locator('.recharts-bar-rectangle').first()).toBeAttached();
 });
 
+test('demo growth view renders WHO curves, points and the table', async ({ page }) => {
+  await page.goto('/growth?demo');
+  // five centile curves plus the baby's line, with dots on the measurements
+  await expect(page.locator('.recharts-line').first()).toBeAttached();
+  await expect(page.locator('.recharts-line-dot').first()).toBeAttached();
+  await expect(page.getByRole('heading', { name: 'Weight (kg)' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Height (cm)' })).toBeVisible();
+  await expect(page.locator('.stat-table')).toBeVisible();
+  await expect(page.getByText(/centile at/).first()).toBeVisible();
+});
+
 test('error screen shows when the session check fails', async ({ page }) => {
   await page.route('**/api/me*', (route) => route.abort());
   await page.goto('/');

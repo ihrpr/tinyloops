@@ -43,6 +43,52 @@ export function shareEmail(v) {
   return email;
 }
 
+// Growth bounds: generous enough for any real 0–2y measurement (and premies),
+// tight enough that a value in the wrong unit (grams, metres) is caught.
+export const WEIGHT_KG = { min: 0.2, max: 40 };
+export const HEIGHT_CM = { min: 20, max: 140 };
+
+const numIn = (v, { min, max }, dp) => {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < min || n > max) return undefined; // out of range
+  return Math.round(n * 10 ** dp) / 10 ** dp;
+};
+
+/** Validate a growth measurement. `nowWall` is the phone's clock. */
+export function growthParams(body, nowWall) {
+  const dateWall = isoToWallMs(String(body.date || '').slice(0, 10));
+  if (dateWall == null) throw new ValidationError('Please set the measurement date.');
+  if (dateWall > nowWall) throw new ValidationError("The measurement date can't be in the future.");
+  const weightKg = numIn(body.weightKg, WEIGHT_KG, 3);
+  if (weightKg === undefined) {
+    throw new ValidationError('That weight looks off — enter kilograms, e.g. 4.25.');
+  }
+  const heightCm = numIn(body.heightCm, HEIGHT_CM, 1);
+  if (heightCm === undefined) {
+    throw new ValidationError('That height looks off — enter centimetres, e.g. 58.5.');
+  }
+  if (weightKg == null && heightCm == null) {
+    throw new ValidationError('Enter a weight, a height, or both.');
+  }
+  return { dateWall, weightKg, heightCm, notes: safeText(body.notes) };
+}
+
+/** Validate the baby profile (birth date + sex) for percentile curves. */
+export function profileParams(body, nowWall) {
+  const birthDate = String(body.birthDate || '').slice(0, 10);
+  const birthWall = isoToWallMs(birthDate);
+  if (birthWall == null || birthWall > nowWall) {
+    throw new ValidationError("Please enter your baby's birth date.");
+  }
+  if (nowWall - birthWall > 6 * 366 * 86400000) {
+    throw new ValidationError('That birth date looks wrong — tinyloops charts cover ages 0–2.');
+  }
+  const sex = ['girl', 'boy'].includes(body.sex) ? body.sex : null;
+  if (!sex) throw new ValidationError('Pick girl or boy — the WHO curves differ.');
+  return { birthDate, sex };
+}
+
 /** Validate an event payload from the client into sheet-layer params. */
 export function eventParams(body) {
   const type = String(body.type || '');

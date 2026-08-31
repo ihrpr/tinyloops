@@ -6,6 +6,7 @@ import { SignIn } from './routes/SignIn.jsx';
 import { Connect } from './routes/Connect.jsx';
 import { Tracker } from './routes/Tracker.jsx';
 import { Stats } from './routes/Stats.jsx';
+import { Growth } from './routes/Growth.jsx';
 import { Privacy, Terms } from './routes/Legal.jsx';
 
 // Resolve the session once at the app root: decides sign-in vs connect vs
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Tracker /> },
       { path: 'stats', element: <Stats /> },
+      { path: 'growth', element: <Growth /> },
       { path: 'connect', element: <Connect /> },
       { path: 'signin', element: <SignIn /> },
     ],

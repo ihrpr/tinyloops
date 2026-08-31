@@ -174,7 +174,7 @@ button.secondary:hover { border-color: var(--accent); }
 button.linkish { background: none; color: var(--muted); font-size: 14px; padding: 10px 6px; }
 button.linkish:hover { color: var(--ink); }
 
-select, input[type="text"], input[type="number"], input[type="email"], input[type="datetime-local"] {
+select, input[type="text"], input[type="number"], input[type="email"], input[type="date"], input[type="datetime-local"] {
   width: 100%; font: inherit; padding: 11px 12px; margin-top: 8px;
   min-height: 44px;
   border: 1px solid var(--line); border-radius: 12px;
@@ -538,6 +538,29 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 .stat-table th:first-child, .stat-table td:first-child { text-align: left; padding-left: 12px; white-space: nowrap; }
 .stat-table th:last-child, .stat-table td:last-child { padding-right: 12px; }
 .stat-table tr:last-child td { border-bottom: none; }
+
+/* ---------- growth ---------- */
+
+.growth-profile { display: flex; align-items: center; gap: 2px; margin: 2px 2px 10px; }
+.growth-profile .linkish { padding: 4px 8px; font-size: 13px; }
+.measure-form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
+.measure-form label.f { flex: 1 1 88px; margin-top: 0; }
+.measure-form .primary { flex: 0 0 auto; min-height: 44px; padding: 10px 20px; margin: 0 0 1px; }
+.sex-seg { margin: 12px 0 16px; }
+.centile-label { font-size: 10px; fill: var(--muted); }
+.chart-x-caption { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+.centile { color: var(--muted); font-size: 11px; }
+.row-del {
+  background: none; color: var(--muted); font-size: 13px;
+  padding: 8px 12px; min-width: 40px; min-height: 40px; border-radius: 8px;
+}
+.row-del:hover { color: var(--danger); background: var(--chip); }
+.chart-tip {
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow-lift);
+  padding: 7px 10px; font-size: 12px; max-width: 240px; line-height: 1.45;
+}
 
 /* ---------- desktop ---------- */
 

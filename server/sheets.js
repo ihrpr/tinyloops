@@ -1,9 +1,11 @@
 /**
  * Sheets I/O — the only code anywhere that reads or writes the spreadsheet.
  *
- * Schema — one spreadsheet, two tabs:
+ * Schema — one spreadsheet, three tabs:
  *   Log:      one row per event, columns HEADERS below.
  *   Settings: key/value pairs shared by everyone using the sheet.
+ *   Growth:   one row per measurement, columns GROWTH_HEADERS below
+ *             (created lazily on sheets that predate growth tracking).
  *
  * All time handling goes through server/time.js (serials in, serials out —
  * never date strings). The spreadsheet is a shared, user-visible contract:
@@ -14,6 +16,7 @@
 import { accessToken, NeedsSignIn } from './auth.js';
 import { UserFacingError } from './errors.js';
 import { cellToWallMs, wallMsToSerial } from './time.js';
+import { WEIGHT_KG, HEIGHT_CM } from './validate.js';
 
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 
@@ -25,6 +28,9 @@ const enc = (id) => encodeURIComponent(id);
 export const HEADERS = [
   'id', 'type', 'start_time', 'end_time', 'duration_min',
   'side', 'amount_ml', 'notes', 'logged_by', 'formula_ml',
+];
+export const GROWTH_HEADERS = [
+  'id', 'date', 'weight_kg', 'height_cm', 'notes', 'logged_by',
 ];
 export const DEFAULT_SETTINGS = {
   breastfeed_ml: 60,
@@ -92,7 +98,13 @@ export async function gapiFetch(c, url, options = {}, isRetry = false) {
 // numOrNull) but `''` on the sheet (write side, blankOrNum) — writing `null`
 // into a values array skips the cell and leaves a stale value, so writes
 // must emit `''` to actually clear a cell.
-const numOrNull = (v) => (v == null || v === '' ? null : Number(v));
+// Non-finite covers hand-edited junk like "5.4 kg" (→ NaN), which would
+// otherwise sail through every `!= null` guard and reach the UI as "NaN".
+const numOrNull = (v) => {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 function rowToEvent(row) {
   return {
@@ -130,12 +142,68 @@ export async function fetchState(c, spreadsheetId) {
     .map((row) => rowToEvent(row))
     .filter((e) => e.id);
   events.sort((a, b) => (b.startWall || 0) - (a.startWall || 0));
+  return { events, settings: parseSettings(settingsRange) };
+}
 
+function parseSettings(range) {
   const settings = { ...DEFAULT_SETTINGS };
-  for (const row of settingsRange.values || []) {
+  for (const row of range.values || []) {
     if (row[0]) settings[String(row[0])] = row[1];
   }
-  return { events, settings };
+  return settings;
+}
+
+// The write path bounds these in growthParams, but the sheet is hand-
+// editable, so reads must re-apply the bounds: an out-of-range cell (grams
+// instead of kg, a stray huge number) would otherwise blow up the chart's
+// axis math downstream. Implausible → treated as absent, like a blank cell.
+const inBounds = (v, { min, max }) => (v != null && v >= min && v <= max ? v : null);
+
+function rowToMeasurement(row) {
+  return {
+    id: String(row[0] ?? ''),
+    dateWall: cellToWallMs(row[1]),
+    weightKg: inBounds(numOrNull(row[2]), WEIGHT_KG),
+    heightCm: inBounds(numOrNull(row[3]), HEIGHT_CM),
+    notes: String(row[4] ?? ''),
+    loggedBy: String(row[5] ?? ''),
+  };
+}
+
+/**
+ * Growth measurements + settings in one request. Sheets created before
+ * growth tracking have no Growth tab, which fails the whole batchGet —
+ * fall back to Settings alone and report no measurements; the tab is
+ * created lazily by the first write. A 'Growth' tab the user made
+ * themselves (header row isn't ours) is left strictly alone: parsing its
+ * columns as measurements would chart garbage, and its column-A values
+ * would become live delete targets. Reads report it via `foreignGrowth`;
+ * writes refuse in ensureGrowthTab.
+ */
+export async function fetchGrowthState(c, spreadsheetId) {
+  const get = (ranges) => gapiFetch(c,
+    `${API}/${enc(spreadsheetId)}/values:batchGet?` +
+    ranges.map((r) => 'ranges=' + encodeURIComponent(r)).join('&') +
+    '&valueRenderOption=UNFORMATTED_VALUE');
+  let growthRange = null;
+  let settingsRange;
+  try {
+    [growthRange, settingsRange] = (await get(['Growth!A1:F', 'Settings!A1:B'])).valueRanges;
+  } catch (err) {
+    if (err.status !== 400) throw err;
+    [settingsRange] = (await get(['Settings!A1:B'])).valueRanges;
+  }
+  const rows = growthRange?.values || [];
+  const head = rows[0] || [];
+  const ours = head[0] === 'id' && head[1] === 'date';
+  const measurements = ours
+    ? rows.slice(1).map((row) => rowToMeasurement(row)).filter((e) => e.id)
+    : [];
+  return {
+    measurements,
+    settings: parseSettings(settingsRange),
+    foreignGrowth: rows.length > 0 && !ours,
+  };
 }
 
 /**
@@ -157,17 +225,17 @@ export async function inspectSheet(c, spreadsheetId) {
 
 const blankOrNum = (v) => (v == null || v === '' || !isFinite(Number(v)) ? '' : Number(v));
 
-async function logSheetId(c, spreadsheetId) {
+async function tabSheetId(c, spreadsheetId, title) {
   const meta = await gapiFetch(c, `${API}/${enc(spreadsheetId)}?fields=sheets.properties`);
-  const log = meta.sheets.find((s) => s.properties.title === 'Log');
-  if (!log) throw new SheetError('The Log tab is missing from this spreadsheet.');
-  return log.properties.sheetId;
+  const tab = meta.sheets.find((s) => s.properties.title === title);
+  if (!tab) throw new SheetError(`The ${title} tab is missing from this spreadsheet.`);
+  return tab.properties.sheetId;
 }
 
 /** Scan the id column and return the 1-based row holding `id`, or throw. */
-async function resolveRow(c, spreadsheetId, id) {
+async function resolveRow(c, spreadsheetId, id, tab = 'Log') {
   const res = await gapiFetch(c,
-    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent('Log!A2:A')}`);
+    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent(`${tab}!A2:A`)}`);
   const rows = res.values || [];
   for (let i = 0; i < rows.length; i++) {
     if ((rows[i] || [])[0] === id) return i + 2;
@@ -183,9 +251,9 @@ async function resolveRow(c, spreadsheetId, id) {
  * before the write; the remaining race window is one round trip, and callers
  * retry once on mismatch to absorb a shift inside it.
  */
-async function idAtRow(c, spreadsheetId, row) {
+async function idAtRow(c, spreadsheetId, row, tab = 'Log') {
   const res = await gapiFetch(c,
-    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent(`Log!A${row}`)}`);
+    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent(`${tab}!A${row}`)}`);
   return ((res.values || [])[0] || [])[0] ?? null;
 }
 
@@ -201,10 +269,10 @@ async function idAtRow(c, spreadsheetId, row) {
  * and turns the common case (a shift during resolution) into a safe retry
  * instead of a wrong-row write.
  */
-async function withVerifiedRow(c, spreadsheetId, id, write) {
+async function withVerifiedRow(c, spreadsheetId, id, write, tab = 'Log') {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const row = await resolveRow(c, spreadsheetId, id);
-    if ((await idAtRow(c, spreadsheetId, row)) === id) {
+    const row = await resolveRow(c, spreadsheetId, id, tab);
+    if ((await idAtRow(c, spreadsheetId, row, tab)) === id) {
       return write(row);
     }
     // the id moved between the scan and the verify — loop re-resolves
@@ -293,7 +361,7 @@ export async function updateEvent(c, spreadsheetId, p) {
 
 export async function deleteEvent(c, spreadsheetId, id) {
   // Fetch the grid id up front so it isn't inside the verify→delete window.
-  const sheetId = await logSheetId(c, spreadsheetId);
+  const sheetId = await tabSheetId(c, spreadsheetId, 'Log');
   await withVerifiedRow(c, spreadsheetId, id, (row) =>
     gapiFetch(c, `${API}/${enc(spreadsheetId)}:batchUpdate`, {
       method: 'POST',
@@ -346,6 +414,98 @@ export async function setSettings(c, spreadsheetId, entries) {
   }
 }
 
+// Datetime/date display format for time columns (values are always serials).
+const dateFormatRequest = (sheetId, startCol, endCol, pattern) => ({
+  repeatCell: {
+    range: { sheetId, startColumnIndex: startCol, endColumnIndex: endCol, startRowIndex: 1 },
+    cell: { userEnteredFormat: { numberFormat: { type: 'DATE_TIME', pattern } } },
+    fields: 'userEnteredFormat.numberFormat',
+  },
+});
+
+/**
+ * Make sure the Growth tab exists AND carries our header row before any
+ * append. Checking existence alone is not enough:
+ *  - a crash between addSheet and the header write would otherwise leave a
+ *    headerless tab forever (raw date serials, rows invisible to reads) —
+ *    the header check makes the next write repair it;
+ *  - a hand-made 'Growth' tab holding the user's own data must never be
+ *    adopted or overwritten — writes refuse with a clear message instead
+ *    (reads treat it as foreign too, see fetchGrowthState).
+ */
+async function ensureGrowthTab(c, spreadsheetId) {
+  let rows = null; // null = no Growth tab at all
+  try {
+    const res = await gapiFetch(c,
+      `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent('Growth!A1:F1')}`);
+    rows = res.values || [];
+  } catch (err) {
+    if (err.status !== 400) throw err; // 400 = missing tab; anything else is real
+  }
+  const head = (rows || [])[0] || [];
+  if (head[0] === 'id' && head[1] === 'date') return; // ready
+  if (rows && head.some((v) => v !== '' && v != null)) {
+    throw new SheetError("This spreadsheet already has a 'Growth' tab with its own " +
+      'content — rename or clear that tab to track growth here.');
+  }
+  if (rows === null) {
+    await gapiFetch(c, `${API}/${enc(spreadsheetId)}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        requests: [{
+          addSheet: { properties: { title: 'Growth', gridProperties: { frozenRowCount: 1 } } },
+        }],
+      }),
+      // most likely a concurrent first-measurement race (duplicate addSheet
+      // 400s); either way the header write below runs on the retry
+      errors: { 400: "Google Sheets couldn't add the Growth tab — please try again." },
+    });
+  }
+  const sheetId = await tabSheetId(c, spreadsheetId, 'Growth');
+  await gapiFetch(c,
+    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent('Growth!A1')}` +
+    '?valueInputOption=RAW',
+    { method: 'PUT', body: JSON.stringify({ values: [GROWTH_HEADERS] }) });
+  await gapiFetch(c, `${API}/${enc(spreadsheetId)}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests: [dateFormatRequest(sheetId, 1, 2, 'dd/MM/yyyy')] }),
+  });
+}
+
+/** p: {dateWall, weightKg?, heightCm?, notes?}. Returns the new row's id. */
+export async function addMeasurement(c, spreadsheetId, p, userEmail) {
+  await ensureGrowthTab(c, spreadsheetId);
+  const id = crypto.randomUUID();
+  const row = [
+    id,
+    wallMsToSerial(p.dateWall),
+    blankOrNum(p.weightKg),
+    blankOrNum(p.heightCm),
+    p.notes || '',
+    userEmail || '',
+  ];
+  await gapiFetch(c,
+    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent('Growth!A2:F')}:append` +
+    '?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+    { method: 'POST', body: JSON.stringify({ values: [row] }) });
+  return id;
+}
+
+export async function deleteMeasurement(c, spreadsheetId, id) {
+  const sheetId = await tabSheetId(c, spreadsheetId, 'Growth');
+  await withVerifiedRow(c, spreadsheetId, id, (row) =>
+    gapiFetch(c, `${API}/${enc(spreadsheetId)}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        requests: [{
+          deleteDimension: {
+            range: { sheetId, dimension: 'ROWS', startIndex: row - 1, endIndex: row },
+          },
+        }],
+      }),
+    }), 'Growth');
+}
+
 /**
  * Give a partner's Google account Editor access to the sheet file itself,
  * via the Drive API — allowed under drive.file for files this user already
@@ -380,6 +540,7 @@ export async function createTrackerSheet(c) {
       sheets: [
         { properties: { title: 'Log', gridProperties: { frozenRowCount: 1 } } },
         { properties: { title: 'Settings' } },
+        { properties: { title: 'Growth', gridProperties: { frozenRowCount: 1 } } },
       ],
     }),
   });
@@ -390,21 +551,20 @@ export async function createTrackerSheet(c) {
       data: [
         { range: 'Log!A1', values: [HEADERS] },
         { range: 'Settings!A1', values: Object.entries(DEFAULT_SETTINGS) },
+        { range: 'Growth!A1', values: [GROWTH_HEADERS] },
       ],
     }),
   });
-  // datetime display format for the time columns (values are written as serials)
+  // display formats for the serial-valued time/date columns
   const logId = created.sheets[0].properties.sheetId;
+  const growthId = created.sheets[2].properties.sheetId;
   await gapiFetch(c, `${API}/${enc(created.spreadsheetId)}:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({
-      requests: [{
-        repeatCell: {
-          range: { sheetId: logId, startColumnIndex: 2, endColumnIndex: 4, startRowIndex: 1 },
-          cell: { userEnteredFormat: { numberFormat: { type: 'DATE_TIME', pattern: 'dd/MM/yyyy hh:mm:ss' } } },
-          fields: 'userEnteredFormat.numberFormat',
-        },
-      }],
+      requests: [
+        dateFormatRequest(logId, 2, 4, 'dd/MM/yyyy hh:mm:ss'),
+        dateFormatRequest(growthId, 1, 2, 'dd/MM/yyyy'),
+      ],
     }),
   });
   return created.spreadsheetId;
