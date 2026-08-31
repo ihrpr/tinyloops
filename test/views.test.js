@@ -185,3 +185,82 @@ describe('buildDay', () => {
     expect(day.entries[1].details).toBe('left · by partner');
   });
 });
+
+describe('solids', () => {
+  const SOLID_SETTINGS = { ...SETTINGS, enabled_types: SETTINGS.enabled_types + ',solid' };
+  const events = newestFirst([
+    ev('solid', '2026-08-29T12:30', { side: 'some', notes: 'carrot, porridge' }),
+    ev('solid', '2026-08-29T08:00', { side: 'taste', notes: 'Carrot' }),
+    ev('solid', '2026-08-27T12:00', { side: 'lots', notes: 'baby rice' }),
+    ev('feed', '2026-08-29T09:00', { durationMin: 20, side: 'L' }),
+  ]);
+
+  it('renders eaten amount, not a nursing side, in the entry details', () => {
+    const day = buildDay(events, isoToWallMs('2026-08-29'), NOW);
+    const solid = day.entries.find((e) => e.type === 'solid' && e.time === '12:30');
+    expect(solid.details).toContain('ate some');
+    expect(solid.details).toContain('carrot, porridge');
+    expect(solid.details).not.toContain('left'); // 'some' never parsed as a side
+  });
+
+  it('summarizes today: count, last-ago, and deduped foods', () => {
+    const home = buildHome(events, SOLID_SETTINGS, NOW);
+    const row = home.summary.rows.find((r) => r.label === 'Solids');
+    expect(row.ago).toBe('1h 30m ago');
+    expect(row.value).toContain('2×');
+    // 'carrot' appears in both meals but with different casing — listed once
+    expect(row.value.toLowerCase().match(/carrot/g)).toHaveLength(1);
+  });
+
+  it('hides the summary row when solids are disabled and none are logged', () => {
+    const home = buildHome(
+      newestFirst([ev('feed', '2026-08-29T09:00', { durationMin: 10, side: 'L' })]),
+      SETTINGS, NOW);
+    expect(home.summary.rows.find((r) => r.label === 'Solids')).toBeUndefined();
+  });
+
+  it('builds the all-time foods-tried list: grouped, counted, newest first taste on top', () => {
+    const from = isoToWallMs('2026-08-28'); // range EXCLUDES the baby-rice day
+    const { foods } = buildStats(events, SOLID_SETTINGS, from, isoToWallMs('2026-08-29'));
+    expect(foods.map((f) => f.food)).toEqual(['porridge', 'Carrot', 'baby rice']);
+    const carrot = foods.find((f) => f.food === 'Carrot');
+    expect(carrot.count).toBe(2);        // case-insensitive grouping
+    expect(carrot.first).toBe('Today');  // first-typed casing, earliest date
+    expect(foods.find((f) => f.food === 'baby rice').count).toBe(1); // all-time despite range
+  });
+
+  it('ignores blank tokens and non-solid notes in the foods list', () => {
+    const { foods } = buildStats(newestFirst([
+      ev('solid', '2026-08-29T12:00', { notes: ' pear ,, ' }),
+      ev('feed', '2026-08-29T09:00', { notes: 'carrot', durationMin: 5 }),
+      ev('solid', '2026-08-29T08:00', { notes: '' }), // meal logged without food
+    ]), SOLID_SETTINGS, isoToWallMs('2026-08-29'), isoToWallMs('2026-08-29'));
+    expect(foods).toEqual([{ food: 'pear', first: 'Today', count: 1 }]);
+  });
+});
+
+describe('solids food chips (home payload)', () => {
+  const SOLID_SETTINGS = { ...SETTINGS, enabled_types: SETTINGS.enabled_types + ',solid' };
+
+  it('puts tried foods first, most recently eaten first, then untried presets', () => {
+    const home = buildHome(newestFirst([
+      ev('solid', '2026-08-29T12:00', { notes: 'dragon fruit, banana' }),
+      ev('solid', '2026-08-27T12:00', { notes: 'carrot' }),
+    ]), SOLID_SETTINGS, NOW);
+    const chips = home.solidFoods;
+    expect(chips.slice(0, 3).map((c) => c.name)).toEqual(['dragon fruit', 'banana', 'carrot']);
+    expect(chips.slice(0, 3).every((c) => c.tried)).toBe(true);
+    // presets follow, minus the already-tried ones
+    expect(chips.filter((c) => c.name === 'banana')).toHaveLength(1);
+    expect(chips.some((c) => c.name === 'apple' && !c.tried)).toBe(true);
+    // preset foods keep their emoji; unknown custom food gets the fallback
+    expect(chips.find((c) => c.name === 'banana').emoji).toBe('🍌');
+    expect(chips.find((c) => c.name === 'carrot').emoji).toBe('🥕');
+    expect(chips.find((c) => c.name === 'dragon fruit').emoji).toBe('🍽️');
+  });
+
+  it('sends no chips when solids are disabled', () => {
+    const home = buildHome([], SETTINGS, NOW);
+    expect(home.solidFoods).toEqual([]);
+  });
+});

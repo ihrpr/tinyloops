@@ -47,6 +47,9 @@ export function demoGrowth(nowWall) {
   };
 }
 
+const FOODS = ['baby rice', 'carrot', 'sweet potato', 'banana', 'porridge',
+  'broccoli', 'avocado', 'apple', 'pear', 'egg'];
+
 function generateDemo(nowWall) {
   const out = [];
   const h = 3600000;
@@ -72,6 +75,17 @@ function generateDemo(nowWall) {
       if (t % 9 === 4) add('dirty', ago - 0.6, { notes: day === 0 ? 'Mucus' : '' });
     }
     add('bottle', day * 24 + 9.5, { amountMl: 60, formulaMl: 30 });
+    // weaning began ~6 weeks ago: one solids meal a day, a new food every
+    // few days, sometimes paired with an old favourite
+    if (day < 42) {
+      const tried = FOODS.slice(0, Math.min(FOODS.length, Math.ceil((42 - day) / 4)));
+      const main = tried[(42 - day) % tried.length];
+      const extra = tried[(44 - day) % tried.length];
+      add('solid', day * 24 + 12.5, {
+        side: ['taste', 'some', 'lots'][day % 3],
+        notes: extra === main ? main : `${main}, ${extra}`,
+      });
+    }
     add('pump', day * 24 + 13, { amountMl: Math.max(20, 62 - day * 2) + (day % 3) * 6 });
     add('sleep', day * 24 + 4, { durationMin: 150 });
     add('play', day * 24 + 11, { durationMin: 25 });

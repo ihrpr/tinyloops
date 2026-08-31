@@ -89,6 +89,7 @@ body {
 .icn.t-nappies { background: rgba(63, 163, 208, .15);  color: #2f88b3; }
 .icn.t-dirty   { background: rgba(138, 106, 82, .16);  color: #7a5c44; }
 .icn.t-baby    { background: rgba(207, 131, 64, .16);  color: #b06f31; }
+.icn.t-solid   { background: rgba(154, 132, 62, .16);  color: #85712c; }
 .icn.t-timer   { background: rgba(63, 122, 78, .14);   color: #3f7a4e; }
 .icn.t-chart   { background: rgba(79, 136, 184, .14);  color: #40749e; }
 .icn.t-lock    { background: rgba(121, 128, 110, .16); color: #6b7261; }
@@ -104,6 +105,7 @@ body {
   .icn.t-nappies { color: #7cc0e0; }
   .icn.t-dirty   { color: #b3937c; }
   .icn.t-baby    { color: #dfa96e; }
+  .icn.t-solid   { color: #c9b465; }
   .icn.t-timer   { color: #8ab992; }
   .icn.t-chart   { color: #85b3d6; }
   .icn.t-lock    { color: #a8ae9c; }
@@ -215,6 +217,21 @@ label.toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
   box-shadow: var(--shadow);
 }
 .type-btn.on .icn { background: var(--accent); color: var(--on-accent); }
+
+/* solids food picker: tap chips, type only for the unusual */
+.food-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.food-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 12px; min-height: 36px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--card); color: var(--ink); font-size: 13px;
+}
+.food-chip:hover { border-color: var(--accent); }
+.food-chip.on {
+  background: rgba(63, 122, 78, .12); border-color: var(--accent);
+  font-weight: 600;
+}
+.food-chip.more { color: var(--muted); }
 
 .seg { display: flex; gap: 6px; margin-top: 8px; }
 .seg button {

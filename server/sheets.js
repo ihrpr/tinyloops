@@ -34,7 +34,7 @@ export const GROWTH_HEADERS = [
 ];
 export const DEFAULT_SETTINGS = {
   breastfeed_ml: 60,
-  enabled_types: 'feed,bottle,sleep,play,pump,wet,dirty',
+  enabled_types: 'feed,bottle,solid,sleep,play,pump,wet,dirty',
 };
 
 export const sheetUrl = (spreadsheetId) =>

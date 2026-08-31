@@ -95,9 +95,12 @@ export function eventParams(body) {
   if (!TYPES[type]) throw new ValidationError('Unknown activity type.');
   const startWall = isoToWallMs(body.start);
   if (startWall == null) throw new ValidationError('Please set a valid start time.');
+  // the side column is dual-purpose: nursing side for feeds, how much was
+  // eaten for solids — each type accepts only its own vocabulary
+  const sides = type === 'solid' ? ['taste', 'some', 'lots'] : ['L', 'R', 'both'];
   const p = {
     type, startWall,
-    side: ['L', 'R', 'both'].includes(body.side) ? body.side : '',
+    side: sides.includes(body.side) ? body.side : '',
     amountMl: clampInt(body.amountMl, MAX_ML),
     formulaMl: clampInt(body.formulaMl, MAX_ML),
     notes: safeText(body.notes),

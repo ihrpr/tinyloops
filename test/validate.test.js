@@ -130,3 +130,14 @@ describe('profileParams', () => {
       .toThrow(/girl or boy/);
   });
 });
+
+describe('side vocabulary per type', () => {
+  it('solids accept eaten amounts and reject nursing sides', () => {
+    expect(eventParams({ type: 'solid', start: '2026-08-29T12:00', side: 'lots' }).side).toBe('lots');
+    expect(eventParams({ type: 'solid', start: '2026-08-29T12:00', side: 'L' }).side).toBe('');
+  });
+  it('feeds accept nursing sides and reject eaten amounts', () => {
+    expect(eventParams({ type: 'feed', start: '2026-08-29T12:00', side: 'L' }).side).toBe('L');
+    expect(eventParams({ type: 'feed', start: '2026-08-29T12:00', side: 'lots' }).side).toBe('');
+  });
+});

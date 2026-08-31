@@ -9,10 +9,12 @@
  */
 
 import { dayStart, wallMsToIso, wallMsToDate, MS_PER_DAY, MS_PER_MIN } from './time.js';
+import { foodTokens, foodChips } from './foods.js';
 
 export const TYPES = {
   feed:   { label: 'Breastfeed',        short: 'Breast',  emoji: '🤱', timed: true },
   bottle: { label: 'Bottle',            short: 'Bottle',  emoji: '🍼', timed: false },
+  solid:  { label: 'Solids',            short: 'Solids',  emoji: '🥣', timed: false },
   sleep:  { label: 'Sleep',             short: 'Sleep',   emoji: '😴', timed: true },
   play:   { label: 'Play / tummy time', short: 'Play',    emoji: '🧸', timed: true },
   pump:   { label: 'Pump',              short: 'Pump',    emoji: '🥛', timed: false },
@@ -76,6 +78,10 @@ export function enabledTypes(settings) {
 
 const sideName = (s) => (s === 'L' ? 'left' : s === 'R' ? 'right' : 'both sides');
 
+// For solids the side column stores how much was eaten (a shared sheet is a
+// readable contract — 'taste'/'some'/'lots' make sense to a human in a cell).
+export const EATEN = { taste: 'just a taste', some: 'ate some', lots: 'ate lots' };
+
 // Free-text fields (notes, the email local-part of loggedBy) travel as raw
 // data; the client HTML-escapes at its single render boundary. Escaping here
 // too would double-escape (a note "a & b" would display as "a &amp; b"), so
@@ -97,7 +103,10 @@ function rawEvent(e) {
 
 function eventDetails(e) {
   const parts = [];
-  if (e.side) parts.push(sideName(e.side));
+  if (e.type === 'solid') {
+    // notes already carry the food, so only the eaten amount is added here
+    if (EATEN[e.side]) parts.push(EATEN[e.side]);
+  } else if (e.side) parts.push(sideName(e.side));
   if (e.type === 'bottle') {
     if (e.amountMl) parts.push(`${e.amountMl}ml milk`);
     if (e.formulaMl) parts.push(`${e.formulaMl}ml formula`);
@@ -182,6 +191,7 @@ export function buildHome(events, settings, nowWall) {
       enabledTypes: ALL_TYPES.filter((k) => en.has(k)),
     },
     sideHint,
+    solidFoods: en.has('solid') ? foodChips(events) : [],
     open,
     summary: buildSummary(events, settings, nowWall),
     list,
@@ -251,6 +261,21 @@ function buildSummary(events, settings, nowWall) {
   if (feeds.length) pushSub('Breastfed', `${feeds.length}× · ≈${breastfedMl}ml`);
   if (bmMl) pushSub('Bottle milk', `${bmMl}ml`);
   if (formulaMl) pushSub('Formula', `${formulaMl}ml`);
+
+  const solids = todayOf('solid');
+  if (en.has('solid') || solids.length) {
+    const lastSolid = allOf('solid')[0];
+    // dedupe case-insensitively, keeping the first-typed casing
+    const seen = new Set();
+    const foodsToday = solids.flatMap((e) => foodTokens(e)).filter((t) => {
+      if (seen.has(t.toLowerCase())) return false;
+      seen.add(t.toLowerCase());
+      return true;
+    });
+    pushRow('solid', '🥣', 'Solids',
+      lastSolid ? agoDur(lastSolid.startWall, nowWall) : '',
+      [solids.length ? `${solids.length}×` : '', foodsToday.join(', ')]);
+  }
 
   const sleeps = todayOf('sleep');
   if (en.has('sleep') || sleeps.length) {
@@ -359,7 +384,25 @@ export function buildStats(events, settings, fromWall, toWall) {
   // label crowding control for arbitrary spans
   const labelStep = n <= 7 ? 1 : n <= 16 ? 2 : n <= 45 ? 5 : 10;
 
+  // First-tastes diary — deliberately ALL-TIME, not range-bound: "has she
+  // had egg before?" needs the full history. Grouped case-insensitively on
+  // the comma-separated food tokens; first-typed casing wins the display.
+  const foodMap = new Map();
+  for (const e of events.slice().reverse()) { // oldest first
+    if (e.type !== 'solid' || e.startWall == null) continue;
+    for (const t of foodTokens(e)) {
+      const f = foodMap.get(t.toLowerCase());
+      if (f) f.count += 1;
+      else foodMap.set(t.toLowerCase(), { food: t.slice(0, 60), firstWall: e.startWall, count: 1 });
+    }
+  }
+  const foods = [...foodMap.values()]
+    .sort((a, b) => b.firstWall - a.firstWall)
+    .slice(0, 200)
+    .map((f) => ({ food: f.food, first: fmtDay(f.firstWall, toWall), count: f.count }));
+
   return {
+    foods,
     from: days[0].date,
     to: days[n - 1].date,
     days,

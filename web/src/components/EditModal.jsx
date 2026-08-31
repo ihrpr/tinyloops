@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api.js';
-import { SideSeg } from './SideSeg.jsx';
+import { SideSeg, EatenSeg } from './SideSeg.jsx';
 
 const numOrNull = (v) => (String(v).trim() === '' ? null : Number(v));
 
@@ -21,7 +21,10 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
 
   async function save() {
     if (!start) return onError('Please set a valid start time.');
-    const p = { id: raw.id, type, start, notes: notes.trim(), side: type === 'feed' ? side : '' };
+    // side carries the nursing side for feeds and the eaten amount for
+    // solids; the server validates each type's own vocabulary
+    const keepSide = type === 'feed' || type === 'solid';
+    const p = { id: raw.id, type, start, notes: notes.trim(), side: keepSide ? side : '' };
     if (meta.timed) {
       if (numOrNull(dur) != null) p.durationMin = numOrNull(dur);
     } else if (raw.type === type && raw.durationMin != null) {
@@ -54,6 +57,7 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
         </select>
 
         {type === 'feed' && <SideSeg value={side} onChange={setSide} />}
+        {type === 'solid' && <EatenSeg value={side} onChange={setSide} />}
 
         {type === 'bottle' && (
           <div>
@@ -78,7 +82,7 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
             <input type="number" inputMode="numeric" min="1" value={dur}
               onChange={(e) => setDur(e.target.value)} /></label>
         )}
-        <label className="f">Notes
+        <label className="f">{type === 'solid' ? 'Food (comma-separate for the foods list)' : 'Notes'}
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
 
         <div className="modal-actions">

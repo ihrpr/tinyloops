@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, localNowIso } from '../api.js';
-import { SideSeg } from './SideSeg.jsx';
+import { SideSeg, EatenSeg } from './SideSeg.jsx';
 import { IconChip } from './icons.jsx';
 
 const numOrNull = (v) => (v.trim() === '' ? null : Number(v));
@@ -16,6 +16,9 @@ export function QuickLog({ home, run, onError, onLogged }) {
   });
   const [side, setSide] = useState('');
   const [sideTouched, setSideTouched] = useState(false);
+  const [eaten, setEaten] = useState('');
+  const [foods, setFoods] = useState(() => new Set());
+  const [allFoods, setAllFoods] = useState(false);
   const [bottleBm, setBottleBm] = useState('');
   const [bottleF, setBottleF] = useState('');
   const [amount, setAmount] = useState('');
@@ -39,8 +42,17 @@ export function QuickLog({ home, run, onError, onLogged }) {
     }
   }, [type, sideTouched, side, home.sideHint]);
 
+  function toggleFood(name) {
+    setFoods((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  }
+
   function reset() {
-    setSide(''); setSideTouched(false);
+    setSide(''); setSideTouched(false); setEaten('');
+    setFoods(new Set()); setAllFoods(false);
     setBottleBm(''); setBottleF(''); setAmount(''); setNotes('');
     setEarlier(false); setStartInput(''); setDurInput('');
   }
@@ -48,6 +60,11 @@ export function QuickLog({ home, run, onError, onLogged }) {
   async function submit() {
     const p = { type, notes: notes.trim() };
     if (type === 'feed') p.side = side;
+    if (type === 'solid') {
+      p.side = eaten;
+      // chips + anything typed → the same comma-separated food string
+      p.notes = [...foods, notes.trim()].filter(Boolean).join(', ');
+    }
     if (type === 'bottle') { p.amountMl = numOrNull(bottleBm); p.formulaMl = numOrNull(bottleF); }
     if (type === 'pump') p.amountMl = numOrNull(amount);
 
@@ -117,6 +134,30 @@ export function QuickLog({ home, run, onError, onLogged }) {
             onChange={(e) => setAmount(e.target.value)} /></label>
       )}
 
+      {type === 'solid' && (
+        <>
+          <div className="food-chips">
+            {(allFoods ? home.solidFoods : home.solidFoods.slice(0, 12))
+              .map((f) => (
+                <button key={f.name} type="button"
+                  className={'food-chip' + (foods.has(f.name) ? ' on' : '')}
+                  aria-pressed={foods.has(f.name)}
+                  onClick={() => toggleFood(f.name)}>
+                  <span aria-hidden="true">{f.emoji}</span> {f.name}
+                </button>
+              ))}
+            {home.solidFoods.length > 12 && (
+              <button type="button" className="food-chip more"
+                onClick={() => setAllFoods(!allFoods)}>
+                {allFoods ? 'less −' : 'more foods +'}
+              </button>
+            )}
+          </div>
+          <div className="side-hint">How much went down?</div>
+          <EatenSeg value={eaten} onChange={setEaten} />
+        </>
+      )}
+
       <label className="toggle">
         <input type="checkbox" checked={earlier}
           onChange={(e) => {
@@ -138,7 +179,9 @@ export function QuickLog({ home, run, onError, onLogged }) {
         </div>
       )}
 
-      <input type="text" placeholder="Notes (optional)" value={notes}
+      <input type="text" value={notes}
+        placeholder={type === 'solid'
+          ? 'Something else? e.g. mango' : 'Notes (optional)'}
         onChange={(e) => setNotes(e.target.value)} />
       <button id="goBtn" className="primary" disabled={busy} onClick={submit}>
         {busy ? 'Saving…' : goLabel}

@@ -27,6 +27,7 @@ export function Mark({ size = 40, color = 'currentColor', strokeWidth = 4.4 }) {
 const PATHS = {
   feed: <path d="M12 21C7.2 16.8 3.8 13.6 3.8 9.9A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8.2 2.9c0 3.7-3.4 6.9-8.2 11.1Z" />,
   bottle: <><path d="M10 8h4V5.8a2 2 0 1 0-4 0Z" /><rect x="8" y="8" width="8" height="13" rx="3" /><path d="M8 12.5h8M8 16.5h8" /></>,
+  solid: <><path d="M4.5 12.5h15a7.5 7.5 0 0 1-15 0Z" /><path d="M14.5 12.5l3.3-5.9" /><circle cx="18.7" cy="4.9" r="1.8" /></>,
   sleep: <path d="M20.4 13.6A8.5 8.5 0 1 1 10.4 3.6a6.8 6.8 0 0 0 10 10Z" />,
   play: <><rect x="3.5" y="13" width="7.5" height="7.5" rx="1.6" /><rect x="13" y="13" width="7.5" height="7.5" rx="1.6" /><rect x="8.25" y="3.5" width="7.5" height="7.5" rx="1.6" /><path d="M12 7.2h.01" strokeWidth="2.4" /></>,
   pump: <><path d="M8.5 3.5h7L13.4 9h-2.8Z" /><rect x="9.3" y="9" width="5.4" height="11.5" rx="2.2" /></>,

@@ -69,6 +69,28 @@ export function Stats() {
         <p className="muted table-note">“Feeds” counts breastfeeds and bottles.
           “Bottle milk” is pumped milk given by bottle; “Pumped” is the amount
           pumped that day. Hover a bar for its details.</p>
+
+        {data?.foods?.length > 0 && (
+          <>
+            <h2>Foods tried ({data.foods.length})</h2>
+            <table className="stat-table foods-table">
+              <tbody>
+                <tr><th>Food</th><th>First tried</th><th>Times</th></tr>
+                {data.foods.map((f) => (
+                  <tr key={f.food.toLowerCase()}>
+                    <td>{f.food}</td>
+                    <td>{f.first}</td>
+                    <td>{f.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="muted table-note">Every food logged with Solids,
+              newest first tastes at the top — all time, not just the dates
+              above. Comma-separate foods when logging (“carrot, porridge”)
+              to track them here individually.</p>
+          </>
+        )}
       </div>
     </Chrome>
   );
