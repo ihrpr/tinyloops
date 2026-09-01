@@ -177,7 +177,8 @@ button.linkish { background: none; color: var(--muted); font-size: 14px; padding
 button.linkish:hover { color: var(--ink); }
 
 select, input[type="text"], input[type="number"], input[type="email"], input[type="date"], input[type="datetime-local"] {
-  width: 100%; font: inherit; padding: 11px 12px; margin-top: 8px;
+  /* 16px minimum: anything smaller makes iOS Safari zoom the page on focus */
+  width: 100%; font: inherit; font-size: 16px; padding: 11px 12px; margin-top: 8px;
   min-height: 44px;
   border: 1px solid var(--line); border-radius: 12px;
   background: var(--card); color: var(--ink);
@@ -250,7 +251,7 @@ label.toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
   margin: 0 0 12px; color: var(--muted); font-size: 13px;
 }
 .range-custom input[type="date"] {
-  flex: 1; font: inherit; padding: 8px 10px; min-height: 40px;
+  flex: 1; font: inherit; font-size: 16px; padding: 8px 10px; min-height: 40px;
   border: 1px solid var(--line); border-radius: 10px;
   background: var(--card); color: var(--ink);
   -webkit-appearance: none; appearance: none;
