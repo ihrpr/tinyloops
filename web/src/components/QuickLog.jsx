@@ -68,17 +68,22 @@ export function QuickLog({ home, run, onError, onLogged }) {
     if (type === 'bottle') { p.amountMl = numOrNull(bottleBm); p.formulaMl = numOrNull(bottleF); }
     if (type === 'pump') p.amountMl = numOrNull(amount);
 
+    // an earlier entry without a duration stays open — the timer runs from
+    // the given start (forgot to press Start, baby still asleep)
+    const dur = earlier ? numOrNull(durInput) : null;
+    const startsTimer = meta.timed && dur == null;
     if (earlier) {
       if (!startInput) return onError('Please pick when it happened.');
       p.start = startInput;
-      const dur = numOrNull(durInput);
-      if (meta.timed && !(dur > 0)) return onError('Please enter the duration in minutes.');
-      if (dur != null) p.durationMin = dur;
+      if (dur != null) {
+        if (!(dur > 0)) return onError('Duration must be at least a minute.');
+        p.durationMin = dur;
+      }
     } else {
       p.start = localNowIso();
-      if (meta.timed && home.open.some((e) => e.type === type) &&
-          !confirm(`A ${meta.label.toLowerCase()} is already running. Start another?`)) return;
     }
+    if (startsTimer && home.open.some((e) => e.type === type) &&
+        !confirm(`A ${meta.label.toLowerCase()} is already running. Start another?`)) return;
 
     setBusy(true);
     const resp = await run(() => api('/api/events', { method: 'POST', body: p }), onError);
@@ -86,7 +91,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
     if (resp) {
       const newId = resp.id;
       reset();
-      onLogged(`${meta.label} ${!earlier && meta.timed ? 'started' : 'logged'} ✓`, async () => {
+      onLogged(`${meta.label} ${startsTimer ? 'started' : 'logged'} ✓`, async () => {
         const r = await run(() => api(`/api/events/${newId}`, { method: 'DELETE' }), onError);
         if (r) onLogged('Entry removed.');
       });
@@ -172,7 +177,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
             <input type="datetime-local" value={startInput}
               onChange={(e) => setStartInput(e.target.value)} /></label>
           {meta.timed && (
-            <label className="f">Duration (minutes)
+            <label className="f">Duration (minutes — empty = still running)
               <input type="number" inputMode="numeric" min="1" value={durInput}
                 onChange={(e) => setDurInput(e.target.value)} /></label>
           )}
