@@ -15,6 +15,7 @@
     "test:e2e": "playwright test",
     "lint": "eslint server web/src test",
     "check": "npm run lint && npm test",
+    "stats": "sh scripts/stats.sh",
     "db:local": "wrangler d1 execute tinyloops --local --file=schema.sql",
     "db:remote": "wrangler d1 execute tinyloops --remote --file=schema.sql"
   },
