@@ -21,7 +21,8 @@ export function MilkChart({ days, any }) {
   }
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={days} margin={{ top: 4, right: 4, bottom: 0, left: -20 }} barCategoryGap={2}>
+      {/* left -4, not -20: the 44px axis must still fit 3-digit ml labels */}
+      <BarChart data={days} margin={{ top: 4, right: 4, bottom: 0, left: -4 }} barCategoryGap={2}>
         <CartesianGrid vertical={false} stroke="var(--line)" />
         <XAxis dataKey="label" tickLine={false} axisLine={false}
           tick={{ fontSize: 11, fill: 'var(--muted)' }} interval="preserveStartEnd" minTickGap={12} />

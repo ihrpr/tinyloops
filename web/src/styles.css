@@ -328,6 +328,49 @@ label.toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
 .hero h1 { margin-bottom: 6px; }
 .tagline { color: var(--muted); font-size: 14.5px; max-width: 300px; margin: 0 auto 16px; }
 
+/* landing (signed-out) */
+.hero .headline {
+  font-family: var(--display);
+  font-size: 26px; font-weight: 800; line-height: 1.18; letter-spacing: -.02em;
+  max-width: 330px; margin: 16px auto 8px;
+  text-wrap: balance;
+}
+.hero .tagline { max-width: 340px; }
+.hero .cta, .hero .warn { max-width: 330px; margin-left: auto; margin-right: auto; }
+.cta-note { color: var(--muted); font-size: 13.5px; }
+
+.screens {
+  display: flex; gap: 18px;
+  overflow-x: auto; scroll-snap-type: x mandatory;
+  padding: 16px 4px 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.phone { flex: none; scroll-snap-align: center; text-align: center; }
+.phone img {
+  display: block; width: 232px; height: auto;
+  background: var(--card);
+  border: 7px solid #252a22;
+  border-radius: 28px;
+  box-shadow: var(--shadow-lift);
+}
+.phone figcaption { color: var(--muted); font-size: 13px; margin-top: 9px; }
+@media (prefers-color-scheme: dark) {
+  .phone img { border-color: #0b0d0a; }
+}
+@media (min-width: 880px) {
+  /* auto margins centre the strip when it fits, yet keep the first phone
+     reachable if it ever overflows (justify-content: center would clip it) */
+  .screens { gap: 20px; }
+  .phone:first-child { margin-left: auto; }
+  .phone:last-child { margin-right: auto; }
+  .phone img { width: 200px; }
+}
+/* steps reused inside a plain card — the platform accordions keep the
+   original .steps padding that lines the circles up with their summary */
+.card:not(.platform) > .steps { padding: 0; }
+.card:not(.platform) > .steps li { align-items: flex-start; }
+.card:not(.platform) > .steps li::before { margin-top: 1px; }
+
 .feature { display: flex; gap: 12px; align-items: center; padding: 7px 0; }
 .feature div b { display: block; font-size: 14.5px; }
 .feature div span { color: var(--muted); font-size: 12.5px; }

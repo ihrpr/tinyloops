@@ -18,7 +18,7 @@ export function PumpChart({ days, trend, any }) {
   }));
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }} barCategoryGap={2}>
+      <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -4 }} barCategoryGap={2}>
         <CartesianGrid vertical={false} stroke="var(--line)" />
         <XAxis dataKey="label" tickLine={false} axisLine={false}
           tick={{ fontSize: 11, fill: 'var(--muted)' }} interval="preserveStartEnd" minTickGap={12} />
