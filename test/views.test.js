@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildHome, buildStats, buildDay } from '../server/views.js';
+import { buildHome, buildStats, buildDay, buildRhythm } from '../server/views.js';
 import { isoToWallMs } from '../server/time.js';
 
 const NOW = isoToWallMs('2026-08-29T14:00');
@@ -262,5 +262,86 @@ describe('solids food chips (home payload)', () => {
   it('sends no chips when solids are disabled', () => {
     const home = buildHome([], SETTINGS, NOW);
     expect(home.solidFoods).toEqual([]);
+  });
+});
+
+describe('buildRhythm', () => {
+  it('hides the section when nothing relevant was logged recently', () => {
+    expect(buildRhythm([], SETTINGS, NOW).any).toBe(false);
+    expect(buildRhythm(newestFirst([ev('wet', '2026-08-29T09:00')]), SETTINGS, NOW).any)
+      .toBe(false);
+    expect(buildRhythm(newestFirst([ev('sleep', '2026-08-01T20:00', { durationMin: 60 })]),
+      SETTINGS, NOW).any).toBe(false); // >14 days old
+  });
+
+  it('splits sleeps at midnight and clips open sleeps to now', () => {
+    const r = buildRhythm(newestFirst([
+      ev('sleep', '2026-08-28T22:00', { durationMin: 240 }), // 22:00 → 02:00
+      ev('sleep', '2026-08-29T13:00', { open: true }),       // running, now = 14:00
+      ev('feed', '2026-08-29T09:00', { durationMin: 10 }),
+    ]), SETTINGS, NOW);
+    expect(r.any).toBe(true);
+    expect(r.nowMin).toBe(14 * 60);
+    const fri = r.days[5], sat = r.days[6];
+    expect(fri.name).toBe('Fri');
+    expect(fri.spans).toEqual([{ a: 22 * 60, b: 24 * 60 }]);
+    expect(sat.name).toBe('Today');
+    expect(sat.today).toBe(true);
+    expect(sat.spans).toEqual([{ a: 0, b: 2 * 60 }, { a: 13 * 60, b: 14 * 60 }]);
+    expect(sat.feeds).toEqual([9 * 60]);
+  });
+
+  it('puts today’s loop in the home summary with the centre readout', () => {
+    const { summary } = buildHome(newestFirst([
+      ev('sleep', '2026-08-28T22:00', { durationMin: 240 }), // night tail → 02:00
+      ev('sleep', '2026-08-29T13:00', { open: true }),       // running, now = 14:00
+      ev('feed', '2026-08-29T09:00', { durationMin: 10 }),
+    ]), SETTINGS, NOW);
+    expect(summary.loop.spans).toEqual([{ a: 0, b: 2 * 60 }, { a: 13 * 60, b: 14 * 60 }]);
+    expect(summary.loop.feeds).toEqual([9 * 60]);
+    expect(summary.loop.nowMin).toBe(14 * 60);
+    // 2h (night tail) + 1h (running) asleep, one feed
+    expect(summary.loop.center.value).toBe('3h');
+    expect(summary.loop.center.sub).toBe('asleep so far · 1 feed');
+  });
+
+  it('omits the loop while today has no sleeps or feeds yet', () => {
+    const { summary } = buildHome(newestFirst([
+      ev('wet', '2026-08-29T09:00'),
+      ev('sleep', '2026-08-27T20:00', { durationMin: 600 }), // two days ago
+    ]), SETTINGS, NOW);
+    expect(summary.empty).toBe(false);
+    expect(summary.loop).toBe(null);
+  });
+
+  it('computes trend tiles over complete days, ignoring days before tracking began', () => {
+    // 15–28 Aug: night 20:00→06:00, naps 09:00 and 12:00, a feed and a bottle
+    const evs = [];
+    for (let day = 15; day <= 28; day++) {
+      const dd = String(day).padStart(2, '0');
+      evs.push(ev('sleep', `2026-08-${dd}T20:00`, { durationMin: 600 }));
+      evs.push(ev('sleep', `2026-08-${dd}T09:00`, { durationMin: 60 }));
+      evs.push(ev('sleep', `2026-08-${dd}T12:00`, { durationMin: 60 }));
+      evs.push(ev('feed', `2026-08-${dd}T08:00`, { durationMin: 10 }));
+      evs.push(ev('bottle', `2026-08-${dd}T15:00`, { amountMl: 100 }));
+    }
+    const r = buildRhythm(newestFirst(evs), SETTINGS, NOW);
+    const tile = (label) => r.tiles.find((t) => t.label === label);
+
+    // current window (22–28 Aug) has 12h/day; the previous window's first day
+    // (15 Aug) misses its inbound night, so last week averaged lower
+    expect(tile('Sleep per day').value).toBe('12h');
+    expect(tile('Sleep per day').delta).toBe('▲ 51m vs last week');
+
+    // every tracked night is one unbroken 20:00→06:00 stretch
+    expect(tile('Longest night stretch').value).toBe('10h');
+    expect(tile('Longest night stretch').delta).toBe('≈ same as last week');
+
+    expect(tile('Feeds per day').value).toBe('2');
+    expect(tile('Feeds per day').delta).toBe('≈ same as last week');
+
+    // the only daytime gap between sleeps is 10:00 → 12:00
+    expect(tile('Typical wake window').value).toBe('2h');
+    expect(tile('Typical wake window').delta).toBe('≈ same as last week');
   });
 });

@@ -8,6 +8,8 @@ test('demo log view renders the tracker', async ({ page }) => {
   await expect(page.locator('#logView')).toBeVisible();
   await expect(page.getByText('Day summary')).toBeVisible();
   await expect(page.getByRole('button', { name: /Start|Log now/ })).toBeVisible();
+  // the 24h day-loop inside the summary widget
+  await expect(page.locator('#summary .rhythm-loop')).toBeVisible();
 });
 
 test('demo stats view renders charts with actual bars', async ({ page }) => {
@@ -18,6 +20,8 @@ test('demo stats view renders charts with actual bars', async ({ page }) => {
   // Recharts must have drawn real bar geometry, not just empty axes
   // (toBeAttached waits for the stats fetch to land and the bars to mount)
   await expect(page.locator('.recharts-bar-rectangle').first()).toBeAttached();
+  // the rhythm section: stacked week bands (today's loop lives on the log view)
+  await expect(page.locator('.rhythm-week')).toBeVisible();
 });
 
 test('demo growth view renders WHO curves, points and the table', async ({ page }) => {

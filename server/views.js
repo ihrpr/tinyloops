@@ -78,6 +78,31 @@ export function enabledTypes(settings) {
 
 const sideName = (s) => (s === 'L' ? 'left' : s === 'R' ? 'right' : 'both sides');
 
+/** Sleep segments overlapping [start, end), as minutes from `start`, clipped
+ *  to the window and to now (open sleeps run to now). Sorted by start. Feeds
+ *  the day-loop widget on the home screen and the rhythm view on stats. */
+function sleepSegments(events, start, end, nowWall) {
+  const segs = [];
+  for (const e of events) {
+    if (e.type !== 'sleep' || e.startWall == null) continue;
+    const s = Math.max(e.startWall, start);
+    const en = Math.min(e.endWall || nowWall, end);
+    if (en <= s) continue;
+    segs.push({ a: Math.round((s - start) / MS_PER_MIN),
+      b: Math.round((en - start) / MS_PER_MIN) });
+  }
+  return segs.sort((x, y) => x.a - y.a);
+}
+
+/** Start minutes-of-day of feeds (breast + bottle) inside [start, end). */
+function feedMinutes(events, start, end) {
+  return events
+    .filter((e) => (e.type === 'feed' || e.type === 'bottle') &&
+      e.startWall != null && e.startWall >= start && e.startWall < end)
+    .map((e) => Math.round((e.startWall - start) / MS_PER_MIN))
+    .sort((x, y) => x - y);
+}
+
 // For solids the side column stores how much was eaten (a shared sheet is a
 // readable contract — 'taste'/'some'/'lots' make sense to a human in a cell).
 export const EATEN = { taste: 'just a taste', some: 'ate some', lots: 'ate lots' };
@@ -316,8 +341,25 @@ function buildSummary(events, settings, nowWall) {
       [(wet || dirty) ? `${wet} wet · ${dirty} dirty` : '']);
   }
 
+  // the 24h day-loop drawn above the rows: today's sleeps as arcs, feeds as
+  // dots. Omitted until the day has something to show — an empty ring with
+  // just a "now" hand explains nothing.
+  const spans = sleepSegments(events, dayStartMs, dayStartMs + MS_PER_DAY, nowWall);
+  const feedsMin = feedMinutes(events, dayStartMs, dayStartMs + MS_PER_DAY);
+  const sleepTodayMin = spans.reduce((a, g) => a + (g.b - g.a), 0);
+  const loop = spans.length || feedsMin.length ? {
+    spans,
+    feeds: feedsMin,
+    nowMin: Math.round((nowWall - dayStartMs) / MS_PER_MIN),
+    center: {
+      value: fmtMin(sleepTodayMin),
+      sub: `asleep so far · ${feedsMin.length} feed${feedsMin.length === 1 ? '' : 's'}`,
+    },
+  } : null;
+
   return {
     empty: false,
+    loop,
     rows,
     note: en.has('feed') ? `1 breastfeed ≈ ${assumedMl}ml — tap to change` : null,
   };
@@ -422,6 +464,127 @@ export function buildStats(events, settings, fromWall, toWall) {
       trend: { y0: yAt(0), y1: yAt(n - 1) },
     },
   };
+}
+
+// ---------- rhythm (today's loop, stacked week bands, trend tiles) ----------
+
+const NIGHT_START_H = 19; // the "night" window for the longest-stretch tile:
+const NIGHT_END_H = 7;    // 19:00 → 07:00 the next morning
+
+const median = (xs) => {
+  if (!xs.length) return null;
+  const s = [...xs].sort((x, y) => x - y);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+};
+
+/** Averages over the 7 complete days starting at w0 (w0 = a day start).
+ *  Days before the family's first-ever entry don't dilute the averages. */
+function rhythmWindow(events, w0, firstDay, nowWall) {
+  const covered = [];
+  for (let i = 0; i < 7; i++) {
+    const s = w0 + i * MS_PER_DAY;
+    if (s >= firstDay) covered.push(s);
+  }
+  if (!covered.length) return null;
+
+  let sleepMin = 0, feedCount = 0;
+  const stretches = []; // longest unbroken night sleep, one per night with data
+  const wakes = [];     // daytime gaps between sleeps
+  for (const s of covered) {
+    const segs = sleepSegments(events, s, s + MS_PER_DAY, nowWall);
+    sleepMin += segs.reduce((a, g) => a + (g.b - g.a), 0);
+    feedCount += feedMinutes(events, s, s + MS_PER_DAY).length;
+
+    // the night that *ends* this morning: yesterday 19:00 → today 07:00
+    const night = sleepSegments(events,
+      s - (24 - NIGHT_START_H) * 60 * MS_PER_MIN,
+      s + NIGHT_END_H * 60 * MS_PER_MIN, nowWall);
+    const longest = Math.max(0, ...night.map((g) => g.b - g.a));
+    if (longest > 0) stretches.push(longest);
+
+    // wake windows: gaps between consecutive sleeps, entirely in 07:00–19:00;
+    // 10min–6h keeps double-logs and missing-data holes out of the median
+    for (let i = 1; i < segs.length; i++) {
+      const gap = segs[i].a - segs[i - 1].b;
+      if (gap >= 10 && gap <= 360 &&
+        segs[i - 1].b >= NIGHT_END_H * 60 && segs[i].a <= NIGHT_START_H * 60) {
+        wakes.push(gap);
+      }
+    }
+  }
+  return {
+    sleepPerDay: Math.round(sleepMin / covered.length),
+    feedsPerDay: feedCount / covered.length,
+    nightStretch: stretches.length
+      ? Math.round(stretches.reduce((a, x) => a + x, 0) / stretches.length) : null,
+    wakeWindow: median(wakes),
+  };
+}
+
+/** '▲ 35m vs last week' — deltas under ~5min (or 0.3 feeds) read as noise. */
+function minDelta(cur, prev) {
+  if (cur == null || prev == null) return null;
+  const diff = cur - prev;
+  if (Math.abs(diff) < 5) return '≈ same as last week';
+  return `${diff > 0 ? '▲' : '▼'} ${fmtMin(Math.abs(diff))} vs last week`;
+}
+
+const fmtPerDay = (x) => (Math.round(x * 10) / 10).toFixed(1).replace(/\.0$/, '');
+
+/**
+ * The week-shape payload for stats: the last 7 days as stacked bands plus
+ * week-over-week trend tiles (today's 24h loop lives in the home summary).
+ * All minutes-of-day and all clipping happen here — the client only draws.
+ * Tiles compare the last 7 COMPLETE days (ending yesterday) with the 7
+ * before, so today's partial day never skews an average.
+ */
+export function buildRhythm(events, settings, nowWall) {
+  const today = dayStart(nowWall);
+  const nowMin = Math.round((nowWall - today) / MS_PER_MIN);
+
+  const horizon = today - 14 * MS_PER_DAY;
+  const any = events.some((e) => e.startWall != null && e.startWall >= horizon &&
+    (e.type === 'sleep' || e.type === 'feed' || e.type === 'bottle'));
+  if (!any) return { any: false };
+
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const s = today - i * MS_PER_DAY;
+    days.push({
+      date: wallMsToDate(s),
+      name: i === 0 ? 'Today' : DAYS[d(s).getUTCDay()],
+      spans: sleepSegments(events, s, s + MS_PER_DAY, nowWall),
+      feeds: feedMinutes(events, s, s + MS_PER_DAY),
+      today: i === 0,
+    });
+  }
+
+  let firstWall = Infinity;
+  for (const e of events) if (e.startWall != null && e.startWall < firstWall) firstWall = e.startWall;
+  const firstDay = firstWall === Infinity ? today : dayStart(firstWall);
+  const cur = rhythmWindow(events, today - 7 * MS_PER_DAY, firstDay, nowWall);
+  const prev = rhythmWindow(events, today - 14 * MS_PER_DAY, firstDay, nowWall);
+
+  const tiles = [];
+  if (cur) {
+    tiles.push({ label: 'Sleep per day', value: fmtMin(cur.sleepPerDay),
+      delta: minDelta(cur.sleepPerDay, prev?.sleepPerDay) });
+    if (cur.nightStretch != null) {
+      tiles.push({ label: 'Longest night stretch', value: fmtMin(cur.nightStretch),
+        delta: minDelta(cur.nightStretch, prev?.nightStretch) });
+    }
+    const fDiff = prev ? cur.feedsPerDay - prev.feedsPerDay : null;
+    tiles.push({ label: 'Feeds per day', value: fmtPerDay(cur.feedsPerDay),
+      delta: fDiff == null ? null : Math.abs(fDiff) < 0.3 ? '≈ same as last week'
+        : `${fDiff > 0 ? '▲' : '▼'} ${fmtPerDay(Math.abs(fDiff))} vs last week` });
+    if (cur.wakeWindow != null) {
+      tiles.push({ label: 'Typical wake window', value: fmtMin(cur.wakeWindow),
+        delta: minDelta(cur.wakeWindow, prev?.wakeWindow) });
+    }
+  }
+
+  return { any: true, nowMin, days, tiles };
 }
 
 /** One day's entries (the /api/days/:date endpoint). */

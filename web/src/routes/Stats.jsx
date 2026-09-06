@@ -3,6 +3,7 @@ import { api, localDateIso, NeedsSignIn } from '../api.js';
 import { Chrome } from '../components/Chrome.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { ReauthBanner } from '../components/ReauthBanner.jsx';
+import { Rhythm } from '../components/charts/Rhythm.jsx';
 import { MilkChart } from '../components/charts/MilkChart.jsx';
 import { PumpChart } from '../components/charts/PumpChart.jsx';
 
@@ -40,6 +41,8 @@ export function Stats() {
           <span>–</span>
           <input type="date" aria-label="To date" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
+
+        {data && <Rhythm rhythm={data.rhythm} />}
 
         <div className="card">
           <h3>Milk per day (ml)</h3>
