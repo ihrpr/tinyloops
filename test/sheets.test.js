@@ -187,11 +187,26 @@ describe('gapiFetch — error mapping', () => {
     await expect(gapiFetch(ctxWith(404), 'https://x/y')).rejects.toThrow(/access to this spreadsheet/);
     await expect(gapiFetch(ctxWith(403), 'https://x/y')).rejects.not.toThrow(/internal detail/);
   });
-  it('429 → rate-limit message', async () => {
+  it('429 → rate-limit message once retries are exhausted', async () => {
     await expect(gapiFetch(ctxWith(429), 'https://x/y')).rejects.toThrow(/rate-limiting/);
   });
   it('500 → temporarily-unavailable message', async () => {
     await expect(gapiFetch(ctxWith(500), 'https://x/y')).rejects.toThrow(/temporarily unavailable/);
+  });
+  it('retries a rate-limited GET and succeeds on a later attempt', async () => {
+    let calls = 0;
+    const ctx = makeCtx(async () => ++calls < 3
+      ? new Response('', { status: 429 })
+      : new Response('{"ok":true}', { status: 200 }));
+    expect(await gapiFetch(ctx, 'https://x/y')).toEqual({ ok: true });
+    expect(calls).toBe(3);
+  });
+  it('never retries a POST — a duplicated append would double-log', async () => {
+    let calls = 0;
+    const ctx = makeCtx(async () => { calls++; return new Response('', { status: 429 }); });
+    await expect(gapiFetch(ctx, 'https://x/y', { method: 'POST', body: '{}' }))
+      .rejects.toThrow(/rate-limiting/);
+    expect(calls).toBe(1);
   });
   it('401 without a retry hook → NeedsSignIn', async () => {
     // hook token is static, so the forced-retry also 401s → NeedsSignIn
@@ -264,22 +279,23 @@ describe('growth measurements', () => {
   });
 
   it('repairs a half-created tab: header write failed once, next write heals it', async () => {
-    // Crash simulation: the first header PUT dies after addSheet succeeded,
-    // leaving a headerless Growth tab. The next write must notice and write
-    // the header before appending — not short-circuit on tab existence.
+    // Crash simulation: the header PUT dies hard (retries included) after
+    // addSheet succeeded, leaving a headerless Growth tab. The next write
+    // must notice and write the header before appending — not short-circuit
+    // on tab existence.
     const fake = new FakeSheets('s');
     let failPut = true;
     const realFetch = fake.fetch;
     fake.fetch = async (url, opts) => {
       const path = decodeURIComponent(new URL(url).pathname);
       if (failPut && (opts.method || 'GET') === 'PUT' && path.includes('/values/Growth!A1')) {
-        failPut = false;
         return new Response('{}', { status: 500 });
       }
       return realFetch(url, opts);
     };
     await expect(addMeasurement(makeCtx(fake), 's', M, 'me@x')).rejects.toThrow();
     expect(fake.tabs.Growth).toEqual([]); // the half-created state
+    failPut = false;
     await addMeasurement(makeCtx(fake), 's', M, 'me@x');
     expect(fake.tabs.Growth[0][0]).toBe('id'); // header healed
     expect(fake.growthRows()).toHaveLength(1);

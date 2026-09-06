@@ -11,6 +11,7 @@ import { EntryList } from '../components/EntryList.jsx';
 import { EditModal } from '../components/EditModal.jsx';
 import { SettingsModal } from '../components/SettingsModal.jsx';
 import { ShareModal } from '../components/ShareModal.jsx';
+import { ReauthBanner } from '../components/ReauthBanner.jsx';
 
 export function Tracker() {
   useOutletContext(); // session (kept for parity; data comes from useHome)
@@ -26,7 +27,8 @@ export function Tracker() {
   if (!home) {
     return (
       <Chrome>
-        <p className={'status' + (status.startsWith('Failed') ? ' error' : '')}>{status}</p>
+        {needsReauth ? <ReauthBanner />
+          : <p className={'status' + (status.startsWith('Failed') ? ' error' : '')}>{status}</p>}
       </Chrome>
     );
   }
@@ -50,12 +52,7 @@ export function Tracker() {
 
   return (
     <Chrome topDate={home.topDate} sheetUrl={home.sheetUrl} onSettings={() => setSettingsOpen(true)}>
-      {needsReauth && (
-        <div className="warn reauth">
-          <span>Google sign-in expired — new entries can&apos;t load or save.</span>
-          <button onClick={() => { location.href = '/auth/login'; }}>Sign back in</button>
-        </div>
-      )}
+      {needsReauth && <ReauthBanner />}
 
       <div id="logView">
         <div className="col-a">

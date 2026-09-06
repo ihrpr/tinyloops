@@ -168,7 +168,8 @@ export function makeCtx(fakeOrFetch, spreadsheetId = 'sheet123') {
   const fetchFn = typeof fakeOrFetch === 'function' ? fakeOrFetch : fakeOrFetch.fetch;
   const user = { id: 'u1', email: 'p@example.com', sheet_id: spreadsheetId };
   return {
-    env: { __gapi: { token: 'test-token', fetch: fetchFn } },
+    // retryWaitMs: 1 — the 429/5xx retry loop must not slow the suite down
+    env: { __gapi: { token: 'test-token', fetch: fetchFn, retryWaitMs: 1 } },
     get: (k) => (k === 'user' ? user : undefined),
   };
 }

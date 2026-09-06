@@ -25,9 +25,11 @@ export function useHome() {
       setNeedsReauth(false);
     } catch (err) {
       if (err instanceof NeedsSignIn) {
-        // keep data on screen; offer reconnect rather than bouncing to sign-in
-        setHome((h) => { if (!h) location.href = '/signin'; return h; });
+        // Never bounce to /signin here: the session cookie is still valid,
+        // so the router would navigate straight back — an endless full-page
+        // reload loop (and a 429 storm). Render the reconnect state instead.
         setNeedsReauth(true);
+        setStatus('');
       } else {
         setStatus(navigator.onLine === false
           ? 'You’re offline — entries can’t load or save until you reconnect.'

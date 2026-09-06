@@ -36,6 +36,7 @@ export default [
         Request: 'readonly', URL: 'readonly', URLSearchParams: 'readonly',
         TextEncoder: 'readonly', TextDecoder: 'readonly',
         btoa: 'readonly', atob: 'readonly', console: 'readonly',
+        setTimeout: 'readonly',
       },
     },
   },

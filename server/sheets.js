@@ -59,14 +59,29 @@ export async function gapiFetch(c, url, options = {}, isRetry = false) {
   // `errors` is ours, not fetch's: an optional {status: message} map letting
   // non-Sheets calls (Drive sharing) override the Sheets-worded defaults.
   const { errors: errorMap, ...init } = options;
-  const resp = await doFetch(url, {
+  const req = {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       ...init.headers,
     },
-  });
+  };
+  // Google's per-minute quota 429s during normal family bursts — both
+  // parents' requests spend the sheet owner's quota — and a single tap must
+  // not fail on a blip. GET and PUT are idempotent so a short retry is safe;
+  // POST is not (a retried append would double-log an entry, a retried
+  // deleteDimension would remove the wrong row after rows shift).
+  const method = (init.method || 'GET').toUpperCase();
+  const retriable = method === 'GET' || method === 'PUT';
+  let resp = await doFetch(url, req);
+  for (let attempt = 0; attempt < 2 && retriable &&
+    (resp.status === 429 || resp.status >= 500); attempt++) {
+    const after = Number(resp.headers.get('Retry-After')) * 1000;
+    const wait = after > 0 && after <= 3000 ? after : 500 + 700 * attempt + Math.random() * 300;
+    await new Promise((r) => setTimeout(r, hook?.retryWaitMs ?? wait));
+    resp = await doFetch(url, req);
+  }
   if (resp.status === 401 && !isRetry) return gapiFetch(c, url, options, true);
   if (resp.status === 401) throw new NeedsSignIn();
   if (!resp.ok) {

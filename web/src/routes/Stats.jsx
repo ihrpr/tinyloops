@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, localDateIso, NeedsSignIn } from '../api.js';
 import { Chrome } from '../components/Chrome.jsx';
 import { useToast } from '../components/Toast.jsx';
+import { ReauthBanner } from '../components/ReauthBanner.jsx';
 import { MilkChart } from '../components/charts/MilkChart.jsx';
 import { PumpChart } from '../components/charts/PumpChart.jsx';
 
@@ -10,6 +11,7 @@ export function Stats() {
   const [from, setFrom] = useState(() => localDateIso(13));
   const [to, setTo] = useState(() => localDateIso(0));
   const [data, setData] = useState(null);
+  const [needsReauth, setNeedsReauth] = useState(false);
   const seq = useRef(0); // drop out-of-order responses while dates are edited
 
   const load = useCallback(async (f, t) => {
@@ -17,9 +19,12 @@ export function Stats() {
     const n = ++seq.current;
     try {
       const resp = await api(`/api/stats?from=${f}&to=${t}`);
-      if (n === seq.current) setData(resp);
+      if (n === seq.current) { setData(resp); setNeedsReauth(false); }
     } catch (err) {
-      if (n !== seq.current || err instanceof NeedsSignIn) return;
+      if (n !== seq.current) return;
+      // expired Google connection: show the reconnect banner in place —
+      // navigating to /signin would bounce back (the cookie is still valid)
+      if (err instanceof NeedsSignIn) return setNeedsReauth(true);
       showToast('Stats failed to load: ' + err.message, { error: true });
     }
   }, [showToast]);
@@ -28,6 +33,7 @@ export function Stats() {
 
   return (
     <Chrome>
+      {needsReauth && <ReauthBanner />}
       <div id="statsView">
         <div className="range-custom">
           <input type="date" aria-label="From date" value={from} onChange={(e) => setFrom(e.target.value)} />

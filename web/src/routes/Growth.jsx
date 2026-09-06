@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, localDateIso, DEMO, NeedsSignIn } from '../api.js';
 import { Chrome } from '../components/Chrome.jsx';
 import { useToast } from '../components/Toast.jsx';
+import { ReauthBanner } from '../components/ReauthBanner.jsx';
 import { GrowthChart } from '../components/charts/GrowthChart.jsx';
 
 // Growth: weight & height against the WHO 0–24 month centile curves. The
@@ -11,6 +12,7 @@ export function Growth() {
   const showToast = useToast();
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState('');
+  const [needsReauth, setNeedsReauth] = useState(false);
   const [editProfile, setEditProfile] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -18,10 +20,12 @@ export function Growth() {
     setLoadError('');
     try {
       setData(await api('/api/growth'));
+      setNeedsReauth(false);
     } catch (err) {
-      // expired session: bounce to sign-in rather than a wordless blank tab
-      // (the root loader doesn't revalidate on child navigations)
-      if (err instanceof NeedsSignIn) return location.replace('/signin');
+      // expired Google connection: the session cookie is still valid, so
+      // navigating to /signin would bounce right back — show the reconnect
+      // banner in place instead (same loop as useHome)
+      if (err instanceof NeedsSignIn) return setNeedsReauth(true);
       setLoadError(err.message);
     }
   }, []);
@@ -36,7 +40,8 @@ export function Growth() {
       setData(resp.growth);
       if (done) done();
     } catch (err) {
-      showToast(err.message, { error: true });
+      if (err instanceof NeedsSignIn) setNeedsReauth(true);
+      else showToast(err.message, { error: true });
     }
     setBusy(false);
   }
@@ -44,6 +49,7 @@ export function Growth() {
   if (!data) {
     return (
       <Chrome>
+        {needsReauth && <ReauthBanner />}
         {loadError && (
           <div className="card">
             <p className="status error">Growth failed to load: {loadError}</p>
@@ -57,6 +63,7 @@ export function Growth() {
   const needsProfile = data.needsProfile || editProfile;
   return (
     <Chrome>
+      {needsReauth && <ReauthBanner />}
       <div id="growthView">
         {needsProfile ? (
           <ProfileForm data={data} busy={busy}
