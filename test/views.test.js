@@ -53,14 +53,15 @@ describe('buildHome', () => {
     expect(stale.open[0].sub).toContain('forgot to stop?');
   });
 
-  it('computes today’s milk with the assumed breastfeed amount', () => {
-    const milk = home.summary.rows.find((r) => r.label === 'Milk today');
-    // 2 feeds today (one open) ×60 + 80 bottle + 40 formula = 240
-    expect(milk.value).toBe('≈240ml');
-    const subs = home.summary.rows.filter((r) => r.kind === 'sub');
-    expect(subs.map((s) => `${s.label}: ${s.value}`)).toEqual([
-      'Breastfed: 2× · ≈120ml', 'Bottle milk: 80ml', 'Formula: 40ml',
-    ]);
+  it('shows milk totals only in the loop centre, with the source breakdown', () => {
+    // totals moved off the rows and into the day-loop — no duplication
+    expect(home.summary.rows.find((r) => r.label === 'Milk today')).toBeUndefined();
+    expect(home.summary.rows.find((r) => r.label === 'Pumped')).toBeUndefined();
+    // 2 feeds + 1 bottle today; milk = 2×60 assumed + 80 bottle + 40 formula
+    expect(home.summary.loop.center.lines).toContainEqual(
+      { label: '3 feeds', value: '≈240ml' });
+    expect(home.summary.loop.center.breakdown)
+      .toBe('≈120ml breastfed · 80ml bottle milk · 40ml formula');
   });
 
   it('reports feeding-now over ago-strings while a feed runs', () => {
@@ -68,9 +69,13 @@ describe('buildHome', () => {
     expect(home.summary.rows.find((r) => r.label === 'Breasts emptied').value).toBe('feeding now');
   });
 
-  it('counts nappies and sleep', () => {
+  it('counts nappies; the sleep row is awake-status only', () => {
     expect(home.summary.rows.find((r) => r.label === 'Nappies').value).toBe('1 wet · 0 dirty');
-    expect(home.summary.rows.find((r) => r.label === 'Sleep').value).toBe('1h');
+    const sleep = home.summary.rows.find((r) => r.label === 'Sleep');
+    expect(sleep.value).toBe('');            // total lives in the loop centre
+    expect(sleep.ago).toBe('awake for 3h');  // slept 10:00–11:00, now 14:00
+    expect(home.summary.loop.center.lines).toContainEqual(
+      { label: '1 sleep', value: '1h' });
   });
 
   it('groups the list into Today and Yesterday only', () => {
@@ -291,18 +296,32 @@ describe('buildRhythm', () => {
     expect(sat.feeds).toEqual([9 * 60]);
   });
 
-  it('puts today’s loop in the home summary with the centre readout', () => {
+  it('puts today’s loop in the home summary with day-total centre lines', () => {
     const { summary } = buildHome(newestFirst([
       ev('sleep', '2026-08-28T22:00', { durationMin: 240 }), // night tail → 02:00
       ev('sleep', '2026-08-29T13:00', { open: true }),       // running, now = 14:00
       ev('feed', '2026-08-29T09:00', { durationMin: 10 }),
+      ev('bottle', '2026-08-29T11:00', { amountMl: 80, formulaMl: 40 }),
+      ev('pump', '2026-08-29T08:00', { amountMl: 90 }),
     ]), SETTINGS, NOW);
     expect(summary.loop.spans).toEqual([{ a: 0, b: 2 * 60 }, { a: 13 * 60, b: 14 * 60 }]);
-    expect(summary.loop.feeds).toEqual([9 * 60]);
+    expect(summary.loop.feeds).toEqual([9 * 60, 11 * 60]);
     expect(summary.loop.nowMin).toBe(14 * 60);
-    // 2h (night tail) + 1h (running) asleep, one feed
-    expect(summary.loop.center.value).toBe('3h');
-    expect(summary.loop.center.sub).toBe('asleep so far · 1 feed');
+    expect(summary.loop.center.lines).toEqual([
+      // 2h night tail + 1h running; 1 breastfeed ×60 (≈) + 80 milk + 40 formula
+      { label: '2 sleeps', value: '3h' },
+      { label: '2 feeds', value: '≈180ml' },
+      { label: 'pumped 1×', value: '90ml' },
+    ]);
+  });
+
+  it('drops the pump line and the ≈ when there is nothing behind them', () => {
+    const { summary } = buildHome(newestFirst([
+      ev('bottle', '2026-08-29T11:00', { amountMl: 80 }),
+    ]), SETTINGS, NOW);
+    expect(summary.loop.center.lines).toEqual([
+      { label: '1 feed', value: '80ml' }, // bottles are exact — no ≈
+    ]);
   });
 
   it('omits the loop while today has no sleeps or feeds yet', () => {

@@ -14,15 +14,13 @@ export function DaySummary({ summary, onEditNursing }) {
       {summary.loop && (
         <div className="sum-loop">
           <DayLoop day={summary.loop} nowMin={summary.loop.nowMin} center={summary.loop.center} />
+          {summary.loop.center.breakdown && (
+            <div className="loop-breakdown">{summary.loop.center.breakdown}</div>
+          )}
           <Legend />
         </div>
       )}
-      {summary.rows.map((r, i) => r.kind === 'sub' ? (
-        <div className="sum-row sub" key={i}>
-          <span className="lbl">{r.label}</span>
-          <span className="v">{r.value}</span>
-        </div>
-      ) : (
+      {summary.rows.map((r, i) => (
         <div className="sum-row" key={i}>
           <IconChip k={r.k} small />
           <span className="lbl">{r.label}{r.ago && <span className="ago"> · {r.ago}</span>}</span>

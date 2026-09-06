@@ -59,9 +59,11 @@ export function DayLoop({ day, nowMin, center }) {
   }
   const [nx1, ny1] = pt(nowMin, R - RING / 2 - 4);
   const [nx2, ny2] = pt(nowMin, R + RING / 2 + 1);
+  const centerText = center.lines
+    .map((l) => l.label + (l.value ? ` ${l.value}` : '')).join(', ');
   return (
     <svg className="rhythm-loop" viewBox={`0 0 ${S} ${S}`} role="img"
-      aria-label={`Today: ${center.value} ${center.sub}`}>
+      aria-label={`Today: ${centerText}`}>
       <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--chip)" strokeWidth={RING} />
       {hours}
       {day.spans.map((sp, i) => <Arc key={i} a={sp.a} b={sp.b} />)}
@@ -78,10 +80,15 @@ export function DayLoop({ day, nowMin, center }) {
         strokeWidth="2.5" strokeLinecap="round">
         <title>{`Now ${fmtHm(nowMin)}`}</title>
       </line>
-      <text x={CX} y={CY - 8} textAnchor="middle" fontSize="24" fontWeight="800"
-        fill="var(--ink)" fontFamily="var(--display)">{center.value}</text>
-      <text x={CX} y={CY + 14} textAnchor="middle" fontSize="12"
-        fill="var(--muted)">{center.sub}</text>
+      {/* day totals, one line per activity, vertically centred as a block */}
+      {center.lines.map((l, i) => (
+        <text key={l.label} x={CX} textAnchor="middle" fontSize="14"
+          fontFamily="var(--display)"
+          y={CY + (i - (center.lines.length - 1) / 2) * 23 + 5}>
+          <tspan fill="var(--muted)">{l.label}</tspan>
+          {l.value && <tspan fill="var(--ink)" fontWeight="800">{'  ' + l.value}</tspan>}
+        </text>
+      ))}
     </svg>
   );
 }

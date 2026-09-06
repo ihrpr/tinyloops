@@ -483,9 +483,6 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 .sum-row .lbl { color: var(--muted); font-size: 14px; flex: 1; }
 .sum-row .lbl .ago { font-size: 12px; }
 .sum-row .v { font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; }
-.sum-row.sub { padding: 2px 0 2px 38px; }
-.sum-row.sub .lbl { font-size: 13px; }
-.sum-row.sub .v { font-weight: 500; }
 .sum-note { font-size: 12px; color: var(--muted); margin-top: 8px; cursor: pointer; }
 .sum-note:hover { color: var(--ink); }
 
@@ -616,6 +613,7 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 /* the loop inside the Day summary card, separated from the rows below it */
 .sum-loop { padding: 4px 0 10px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
 .sum-loop .rhythm-legend { justify-content: center; }
+.loop-breakdown { text-align: center; font-size: 12px; color: var(--muted); margin-top: 2px; }
 .rhythm-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
 .rhythm-tiles .tile {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);

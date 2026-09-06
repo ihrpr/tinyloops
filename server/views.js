@@ -254,7 +254,6 @@ function buildSummary(events, settings, nowWall) {
     if (!value && !ago) return;
     rows.push({ kind: 'row', k, emoji, label, ago, value });
   };
-  const pushSub = (label, value) => rows.push({ kind: 'sub', label, value });
 
   const feeds = todayOf('feed');
   const bottles = todayOf('bottle');
@@ -277,15 +276,13 @@ function buildSummary(events, settings, nowWall) {
         : '—']);
   }
 
-  // total milk taken today, breastfeeds counted at the assumed amount
+  // total milk taken today, breastfeeds counted at the assumed amount.
+  // The totals themselves are shown in the day-loop's centre, not as rows —
+  // the rows carry only what the loop can't say (recency, statuses, counts).
   const bmMl = bottles.reduce((a, e) => a + (e.amountMl || 0), 0);
   const formulaMl = bottles.reduce((a, e) => a + (e.formulaMl || 0), 0);
   const breastfedMl = feeds.length * assumedMl;
   const totalMl = bmMl + formulaMl + breastfedMl;
-  pushRow('milk', '🍽️', 'Milk today', '', [totalMl ? `≈${totalMl}ml` : '']);
-  if (feeds.length) pushSub('Breastfed', `${feeds.length}× · ≈${breastfedMl}ml`);
-  if (bmMl) pushSub('Bottle milk', `${bmMl}ml`);
-  if (formulaMl) pushSub('Formula', `${formulaMl}ml`);
 
   const solids = todayOf('solid');
   if (en.has('solid') || solids.length) {
@@ -307,11 +304,11 @@ function buildSummary(events, settings, nowWall) {
     const sleepsAll = allOf('sleep');
     const sleepingNow = sleepsAll.some((e) => !e.endWall);
     const lastWake = sleepsAll.find((e) => e.endWall);
-    const sleepMin = sleeps.reduce((a, e) => a + overlapMin(e, dayStartMs, nowWall), 0);
+    // status only — the total slept is a centre line in the loop
     pushRow('sleep', '😴', 'Sleep',
       sleepingNow ? 'sleeping now'
         : lastWake ? 'awake for ' + fmtMin(Math.max(0, Math.floor((nowWall - lastWake.endWall) / MS_PER_MIN))) : '',
-      [sleepMin ? fmtMin(sleepMin) : '']);
+      ['']);
   }
 
   const plays = todayOf('play');
@@ -323,14 +320,9 @@ function buildSummary(events, settings, nowWall) {
       [playMin ? fmtMin(playMin) : '']);
   }
 
+  // no Pumped row: the total is a centre line in the loop and the recency is
+  // already covered by "Breasts emptied … (pump)"
   const pumps = todayOf('pump');
-  if (en.has('pump') || pumps.length) {
-    const lastPump = allOf('pump')[0];
-    const pumpMl = pumps.reduce((a, e) => a + (e.amountMl || 0), 0);
-    pushRow('pump', '🥛', 'Pumped',
-      lastPump ? agoDur(lastPump.startWall, nowWall) : '',
-      [pumps.length ? `${pumps.length}×` : '', pumpMl ? `${pumpMl}ml` : '']);
-  }
 
   const wet = todayOf('wet').length;
   const dirty = todayOf('dirty').length;
@@ -343,18 +335,37 @@ function buildSummary(events, settings, nowWall) {
 
   // the 24h day-loop drawn above the rows: today's sleeps as arcs, feeds as
   // dots. Omitted until the day has something to show — an empty ring with
-  // just a "now" hand explains nothing.
+  // just a "now" hand explains nothing. The centre carries up to three
+  // day-total lines; each appears only once its activity has data.
   const spans = sleepSegments(events, dayStartMs, dayStartMs + MS_PER_DAY, nowWall);
   const feedsMin = feedMinutes(events, dayStartMs, dayStartMs + MS_PER_DAY);
   const sleepTodayMin = spans.reduce((a, g) => a + (g.b - g.a), 0);
-  const loop = spans.length || feedsMin.length ? {
+  const pumpMlToday = pumps.reduce((a, e) => a + (e.amountMl || 0), 0);
+  const centerLines = [];
+  if (spans.length) {
+    centerLines.push({ label: `${spans.length} sleep${spans.length === 1 ? '' : 's'}`,
+      value: fmtMin(sleepTodayMin) });
+  }
+  if (feedsMin.length) {
+    // ≈ whenever breastfeeds contribute their assumed amount; exact otherwise
+    centerLines.push({ label: `${feedsMin.length} feed${feedsMin.length === 1 ? '' : 's'}`,
+      value: totalMl ? `${breastfedMl ? '≈' : ''}${totalMl}ml` : '' });
+  }
+  if (pumps.length) {
+    centerLines.push({ label: `pumped ${pumps.length}×`,
+      value: pumpMlToday ? `${pumpMlToday}ml` : '' });
+  }
+  // milk by source, under the loop — the one place the mix survives now that
+  // the Milk today row is gone; pointless when a single source contributed
+  const milkParts = [];
+  if (breastfedMl) milkParts.push(`≈${breastfedMl}ml breastfed`);
+  if (bmMl) milkParts.push(`${bmMl}ml bottle milk`);
+  if (formulaMl) milkParts.push(`${formulaMl}ml formula`);
+  const loop = centerLines.length ? {
     spans,
     feeds: feedsMin,
     nowMin: Math.round((nowWall - dayStartMs) / MS_PER_MIN),
-    center: {
-      value: fmtMin(sleepTodayMin),
-      sub: `asleep so far · ${feedsMin.length} feed${feedsMin.length === 1 ? '' : 's'}`,
-    },
+    center: { lines: centerLines, breakdown: milkParts.length > 1 ? milkParts.join(' · ') : null },
   } : null;
 
   return {
