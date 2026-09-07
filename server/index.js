@@ -133,11 +133,13 @@ app.use('/api/*', async (c, next) => {
     return c.json({ error: 'Demo mode is read-only.' }, 403);
   }
   const now = nowWall(c);
-  const events = demoEvents(now);
   const path = new URL(c.req.url).pathname;
   if (path === '/api/me') {
     return c.json({ email: 'demo@example.com', hasSheet: true, demo: true });
   }
+  // after /api/me: demoEvents caches per day anchored to the FIRST caller's
+  // `now`, so a session check without a now param must not warm that cache
+  const events = demoEvents(now);
   if (path === '/api/home') {
     const home = buildHome(events, DEMO_SETTINGS, now);
     home.email = 'demo@example.com';

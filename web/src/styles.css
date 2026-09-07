@@ -610,10 +610,23 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 .rhythm-legend .sw.sleep { width: 15px; height: 8px; border-radius: 4px; background: var(--accent); }
 .rhythm-legend .sw.feed { width: 8px; height: 8px; border-radius: 99px; background: var(--warm); }
 .rhythm-legend .sw.now { width: 2.5px; height: 12px; border-radius: 2px; background: var(--warm); }
-/* the loop inside the Day summary card, separated from the rows below it */
-.sum-loop { padding: 4px 0 10px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
-.sum-loop .rhythm-legend { justify-content: center; }
-.loop-breakdown { text-align: center; font-size: 12px; color: var(--muted); margin-top: 2px; }
+/* the day strip on top of the Day summary card, one summary below it */
+.sum-day { padding: 0 0 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+.sum-day .rhythm-legend { justify-content: center; margin-top: 4px; font-size: 11.5px; }
+.day-nav { display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 6px; }
+.day-nav button {
+  background: var(--chip); color: var(--ink); border-radius: 10px;
+  width: 36px; height: 36px; padding: 0; font-size: 20px; line-height: 1;
+}
+.day-nav button:disabled { opacity: .35; }
+.day-name {
+  font-family: var(--display); font-weight: 800; font-size: 15px;
+  min-width: 130px; text-align: center;
+}
+.day-band { display: block; width: 100%; height: auto; }
+.sum-row.sub { padding: 2px 0 2px 38px; }
+.sum-row.sub .lbl { font-size: 13px; }
+.sum-row.sub .v { font-weight: 500; }
 .rhythm-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
 .rhythm-tiles .tile {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);

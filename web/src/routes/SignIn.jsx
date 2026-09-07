@@ -18,7 +18,8 @@ const AUTH_ERRORS = {
 // to 520px wide — see web/public/screens/).
 const SCREENS = [
   { src: '/screens/log.png', caption: 'Log a feed in one tap', alt: 'The log screen: activity buttons and a running breastfeed timer' },
-  { src: '/screens/stats.png', caption: 'See the day take shape', alt: 'The stats screen: daily milk and pumping charts' },
+  { src: '/screens/rhythm.png', caption: 'The day at a glance', alt: 'The day summary: sleeps and feeds drawn on a 24-hour line with the day’s totals, pageable back through the week' },
+  { src: '/screens/stats.png', caption: 'See the week take shape', alt: 'The stats screen: a week of sleeps and feeds stacked by day, with trend tiles' },
   { src: '/screens/growth.png', caption: 'Watch them grow', alt: 'The growth screen: weight and height charted over time' },
   { src: '/screens/settings.png', caption: 'Track only what you need', alt: 'The settings screen: pick which activities appear in the quick log' },
 ];

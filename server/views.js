@@ -61,12 +61,6 @@ const agoDur = (w, nowWall) => {
 const elapsedMin = (e, nowWall) => (e.startWall == null ? 0
   : Math.max(0, Math.round(((e.endWall || nowWall) - e.startWall) / MS_PER_MIN)));
 
-function overlapMin(e, fromWall, nowWall) {
-  const end = Math.min(e.endWall || nowWall, nowWall);
-  const start = Math.max(e.startWall, fromWall);
-  return Math.max(0, Math.round((end - start) / MS_PER_MIN));
-}
-
 // ---------- shared pieces ----------
 
 export function enabledTypes(settings) {
@@ -101,6 +95,14 @@ function feedMinutes(events, start, end) {
       e.startWall != null && e.startWall >= start && e.startWall < end)
     .map((e) => Math.round((e.startWall - start) / MS_PER_MIN))
     .sort((x, y) => x - y);
+}
+
+/** The drawable 24h shape of one day: sleep spans + feed-dot minutes. */
+function dayShape(events, s, nowWall) {
+  return {
+    spans: sleepSegments(events, s, s + MS_PER_DAY, nowWall),
+    feeds: feedMinutes(events, s, s + MS_PER_DAY),
+  };
 }
 
 // For solids the side column stores how much was eaten (a shared sheet is a
@@ -225,15 +227,116 @@ export function buildHome(events, settings, nowWall) {
 
 // ---------- day summary ----------
 
+/**
+ * The summary rows for one day [s, s+DAY) — the SAME layout for every day,
+ * so paging back reads exactly like today. `isToday` adds what only makes
+ * sense in the present: the recency rows (breasts emptied, last ate), the
+ * ago-strings, and open events counting toward the day.
+ */
+function summaryRows(events, s, en, assumedMl, nowWall, isToday) {
+  const dayEnd = s + MS_PER_DAY;
+  const isTimed = (e) => (TYPES[e.type] || {}).timed;
+  const inDay = (e) => e.startWall != null && ((e.startWall >= s && e.startWall < dayEnd) ||
+    (isToday && ((e.endWall && e.endWall >= s) || (isTimed(e) && !e.endWall))));
+  const of = (t) => events.filter((e) => e.type === t && inDay(e));
+  const allOf = (t) => events.filter((e) => e.type === t); // newest first
+  const openFeed = isToday && events.some((e) => e.type === 'feed' && !e.endWall);
+  // minutes of a timed event inside this day (open events run to now)
+  const overlap = (e) => (e.startWall == null ? 0 : Math.max(0, Math.round(
+    (Math.min(e.endWall || nowWall, dayEnd, nowWall) - Math.max(e.startWall, s)) / MS_PER_MIN)));
+
+  const rows = [];
+  // `k` is the icon key the client maps to its SVG set; emoji stays as a
+  // fallback for anything that still renders text.
+  const pushRow = (k, emoji, label, ago, parts) => {
+    const value = parts.filter(Boolean).join(' · ');
+    if (!value && !ago) return;
+    rows.push({ kind: 'row', k, emoji, label, ago, value });
+  };
+  const pushSub = (label, value) => rows.push({ kind: 'sub', label, value });
+
+  // milk taken that day, breastfeeds counted at the assumed amount
+  // (≈ only when they contribute; a bottles-only day is exact). Today's ago
+  // is when the baby last ate — breastfeed or bottle, whichever is later.
+  const feeds = of('feed');
+  const bottles = of('bottle');
+  const bmMl = bottles.reduce((a, e) => a + (e.amountMl || 0), 0);
+  const formulaMl = bottles.reduce((a, e) => a + (e.formulaMl || 0), 0);
+  const breastfedMl = feeds.length * assumedMl;
+  const totalMl = bmMl + formulaMl + breastfedMl;
+  const lastAte = isToday ? events.find((e) => e.type === 'feed' || e.type === 'bottle') : null;
+  pushRow('milk', '🍽️', isToday ? 'Milk today' : 'Milk',
+    openFeed ? 'feeding now'
+      : lastAte ? agoDur(lastAte.startWall, nowWall) + (lastAte.type === 'bottle' ? ' (bottle)' : ' (breast)')
+      : '',
+    [totalMl ? `${breastfedMl ? '≈' : ''}${totalMl}ml` : '']);
+  if (feeds.length) pushSub('Breastfed', `${feeds.length}× · ≈${breastfedMl}ml`);
+  if (bmMl) pushSub('Bottle milk', `${bmMl}ml`);
+  if (formulaMl) pushSub('Formula', `${formulaMl}ml`);
+
+  const solids = of('solid');
+  if (en.has('solid') || solids.length) {
+    const lastSolid = allOf('solid')[0];
+    // dedupe case-insensitively, keeping the first-typed casing
+    const seen = new Set();
+    const foodsThatDay = solids.flatMap((e) => foodTokens(e)).filter((t) => {
+      if (seen.has(t.toLowerCase())) return false;
+      seen.add(t.toLowerCase());
+      return true;
+    });
+    pushRow('solid', '🥣', 'Solids',
+      isToday && lastSolid ? agoDur(lastSolid.startWall, nowWall) : '',
+      [solids.length ? `${solids.length}×` : '', foodsThatDay.join(', ')]);
+  }
+
+  // sleep total from the same clipped segments the band draws, so the row
+  // and the picture can never disagree (a sleep crossing midnight counts
+  // its pre-midnight part yesterday and its tail today)
+  const sleepMin = sleepSegments(events, s, dayEnd, nowWall)
+    .reduce((a, g) => a + (g.b - g.a), 0);
+  if (en.has('sleep') || sleepMin) {
+    const sleepsAll = allOf('sleep');
+    const sleepingNow = sleepsAll.some((e) => !e.endWall);
+    const lastWake = sleepsAll.find((e) => e.endWall);
+    pushRow('sleep', '😴', 'Sleep',
+      !isToday ? ''
+        : sleepingNow ? 'sleeping now'
+        : lastWake ? 'awake for ' + fmtMin(Math.max(0, Math.floor((nowWall - lastWake.endWall) / MS_PER_MIN))) : '',
+      [sleepMin ? fmtMin(sleepMin) : '']);
+  }
+
+  const playMin = events.filter((e) => e.type === 'play')
+    .reduce((a, e) => a + overlap(e), 0);
+  if (en.has('play') || playMin) {
+    const lastPlay = allOf('play')[0];
+    pushRow('play', '🧸', 'Play',
+      isToday && lastPlay ? (!lastPlay.endWall ? 'playing now' : agoDur(lastPlay.startWall, nowWall)) : '',
+      [playMin ? fmtMin(playMin) : '']);
+  }
+
+  const pumps = of('pump');
+  if (en.has('pump') || pumps.length) {
+    const lastPump = allOf('pump')[0];
+    const pumpMl = pumps.reduce((a, e) => a + (e.amountMl || 0), 0);
+    pushRow('pump', '🥛', 'Pumped',
+      isToday && lastPump ? agoDur(lastPump.startWall, nowWall) : '',
+      [pumps.length ? `${pumps.length}×` : '', pumpMl ? `${pumpMl}ml` : '']);
+  }
+
+  const wet = of('wet').length;
+  const dirty = of('dirty').length;
+  if (en.has('wet') || en.has('dirty') || wet || dirty) {
+    const lastNappy = events.find((e) => e.type === 'wet' || e.type === 'dirty');
+    pushRow('nappies', '💧💩', 'Nappies',
+      isToday && lastNappy ? agoDur(lastNappy.startWall, nowWall) : '',
+      [(wet || dirty) ? `${wet} wet · ${dirty} dirty` : '']);
+  }
+
+  return rows;
+}
+
 function buildSummary(events, settings, nowWall) {
   const dayStartMs = dayStart(nowWall);
-  const isTimed = (e) => (TYPES[e.type] || {}).timed;
-  const isToday = (e) => e.startWall >= dayStartMs ||
-    (e.endWall && e.endWall >= dayStartMs) || (isTimed(e) && !e.endWall);
-  const todayOf = (t) => events.filter((e) => e.type === t && isToday(e));
-  const allOf = (t) => events.filter((e) => e.type === t); // newest first
-  const openFeed = events.some((e) => e.type === 'feed' && !e.endWall);
-
   const assumedMl = Number(settings.breastfeed_ml) || 60;
   const en = enabledTypes(settings);
 
@@ -246,131 +349,29 @@ function buildSummary(events, settings, nowWall) {
     };
   }
 
-  const rows = [];
-  // `k` is the icon key the client maps to its SVG set; emoji stays as a
-  // fallback for anything that still renders text.
-  const pushRow = (k, emoji, label, ago, parts) => {
-    const value = parts.filter(Boolean).join(' · ');
-    if (!value && !ago) return;
-    rows.push({ kind: 'row', k, emoji, label, ago, value });
-  };
+  const rows = summaryRows(events, dayStartMs, en, assumedMl, nowWall, true);
 
-  const feeds = todayOf('feed');
-  const bottles = todayOf('bottle');
-
-  // when were breasts last emptied (breastfeed or pump, whichever is later)
-  if (en.has('feed') || en.has('pump')) {
-    const lastEmpty = events.find((e) => e.type === 'feed' || e.type === 'pump');
-    pushRow('feed', '🤱', 'Breasts emptied', '',
-      [openFeed ? 'feeding now'
-        : lastEmpty ? agoDur(lastEmpty.startWall, nowWall) + (lastEmpty.type === 'pump' ? ' (pump)' : ' (feed)')
-        : '—']);
-  }
-
-  // when the baby last ate (breastfeed or bottle, whichever is later)
-  if (en.has('feed') || en.has('bottle')) {
-    const lastAte = events.find((e) => e.type === 'feed' || e.type === 'bottle');
-    pushRow('baby', '👶', 'Last ate', '',
-      [openFeed ? 'feeding now'
-        : lastAte ? agoDur(lastAte.startWall, nowWall) + (lastAte.type === 'bottle' ? ' (bottle)' : ' (breast)')
-        : '—']);
-  }
-
-  // total milk taken today, breastfeeds counted at the assumed amount.
-  // The totals themselves are shown in the day-loop's centre, not as rows —
-  // the rows carry only what the loop can't say (recency, statuses, counts).
-  const bmMl = bottles.reduce((a, e) => a + (e.amountMl || 0), 0);
-  const formulaMl = bottles.reduce((a, e) => a + (e.formulaMl || 0), 0);
-  const breastfedMl = feeds.length * assumedMl;
-  const totalMl = bmMl + formulaMl + breastfedMl;
-
-  const solids = todayOf('solid');
-  if (en.has('solid') || solids.length) {
-    const lastSolid = allOf('solid')[0];
-    // dedupe case-insensitively, keeping the first-typed casing
-    const seen = new Set();
-    const foodsToday = solids.flatMap((e) => foodTokens(e)).filter((t) => {
-      if (seen.has(t.toLowerCase())) return false;
-      seen.add(t.toLowerCase());
-      return true;
+  // the day strip drawn above the rows, pageable back through the week: one
+  // payload, no extra sheet reads. Past days carry their own rows (same
+  // layout as today, minus the now-statuses); today's rows are the top-level
+  // `rows` so they aren't shipped twice. Omitted when the week is empty.
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const s = dayStartMs - i * MS_PER_DAY;
+    days.push({
+      ...dayShape(events, s, nowWall),
+      date: wallMsToDate(s),
+      name: fmtDay(s, nowWall),
+      today: i === 0,
+      ...(i > 0 && { rows: summaryRows(events, s, en, assumedMl, nowWall, false) }),
     });
-    pushRow('solid', '🥣', 'Solids',
-      lastSolid ? agoDur(lastSolid.startWall, nowWall) : '',
-      [solids.length ? `${solids.length}×` : '', foodsToday.join(', ')]);
   }
-
-  const sleeps = todayOf('sleep');
-  if (en.has('sleep') || sleeps.length) {
-    const sleepsAll = allOf('sleep');
-    const sleepingNow = sleepsAll.some((e) => !e.endWall);
-    const lastWake = sleepsAll.find((e) => e.endWall);
-    // status only — the total slept is a centre line in the loop
-    pushRow('sleep', '😴', 'Sleep',
-      sleepingNow ? 'sleeping now'
-        : lastWake ? 'awake for ' + fmtMin(Math.max(0, Math.floor((nowWall - lastWake.endWall) / MS_PER_MIN))) : '',
-      ['']);
-  }
-
-  const plays = todayOf('play');
-  if (en.has('play') || plays.length) {
-    const lastPlay = allOf('play')[0];
-    const playMin = plays.reduce((a, e) => a + overlapMin(e, dayStartMs, nowWall), 0);
-    pushRow('play', '🧸', 'Play',
-      lastPlay ? (!lastPlay.endWall ? 'playing now' : agoDur(lastPlay.startWall, nowWall)) : '',
-      [playMin ? fmtMin(playMin) : '']);
-  }
-
-  // no Pumped row: the total is a centre line in the loop and the recency is
-  // already covered by "Breasts emptied … (pump)"
-  const pumps = todayOf('pump');
-
-  const wet = todayOf('wet').length;
-  const dirty = todayOf('dirty').length;
-  if (en.has('wet') || en.has('dirty') || wet || dirty) {
-    const lastNappy = events.find((e) => e.type === 'wet' || e.type === 'dirty');
-    pushRow('nappies', '💧💩', 'Nappies',
-      lastNappy ? agoDur(lastNappy.startWall, nowWall) : '',
-      [(wet || dirty) ? `${wet} wet · ${dirty} dirty` : '']);
-  }
-
-  // the 24h day-loop drawn above the rows: today's sleeps as arcs, feeds as
-  // dots. Omitted until the day has something to show — an empty ring with
-  // just a "now" hand explains nothing. The centre carries up to three
-  // day-total lines; each appears only once its activity has data.
-  const spans = sleepSegments(events, dayStartMs, dayStartMs + MS_PER_DAY, nowWall);
-  const feedsMin = feedMinutes(events, dayStartMs, dayStartMs + MS_PER_DAY);
-  const sleepTodayMin = spans.reduce((a, g) => a + (g.b - g.a), 0);
-  const pumpMlToday = pumps.reduce((a, e) => a + (e.amountMl || 0), 0);
-  const centerLines = [];
-  if (spans.length) {
-    centerLines.push({ label: `${spans.length} sleep${spans.length === 1 ? '' : 's'}`,
-      value: fmtMin(sleepTodayMin) });
-  }
-  if (feedsMin.length) {
-    // ≈ whenever breastfeeds contribute their assumed amount; exact otherwise
-    centerLines.push({ label: `${feedsMin.length} feed${feedsMin.length === 1 ? '' : 's'}`,
-      value: totalMl ? `${breastfedMl ? '≈' : ''}${totalMl}ml` : '' });
-  }
-  if (pumps.length) {
-    centerLines.push({ label: `pumped ${pumps.length}×`,
-      value: pumpMlToday ? `${pumpMlToday}ml` : '' });
-  }
-  // milk by source, under the loop — the one place the mix survives now that
-  // the Milk today row is gone; pointless when a single source contributed
-  const milkParts = [];
-  if (breastfedMl) milkParts.push(`≈${breastfedMl}ml breastfed`);
-  if (bmMl) milkParts.push(`${bmMl}ml bottle milk`);
-  if (formulaMl) milkParts.push(`${formulaMl}ml formula`);
-  const loop = centerLines.length ? {
-    spans,
-    feeds: feedsMin,
-    nowMin: Math.round((nowWall - dayStartMs) / MS_PER_MIN),
-    center: { lines: centerLines, breakdown: milkParts.length > 1 ? milkParts.join(' · ') : null },
-  } : null;
 
   return {
     empty: false,
-    loop,
+    days: days.some((day) => day.spans.length || day.feeds.length || day.rows?.length)
+      ? days : null,
+    nowMin: Math.round((nowWall - dayStartMs) / MS_PER_MIN),
     rows,
     note: en.has('feed') ? `1 breastfeed ≈ ${assumedMl}ml — tap to change` : null,
   };

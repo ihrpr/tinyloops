@@ -90,6 +90,14 @@ function generateDemo(nowWall) {
     add('sleep', day * 24 + 4, { durationMin: 150 });
     add('play', day * 24 + 11, { durationMin: 25 });
   }
+  // night sleeps anchored to day boundaries (not hours-ago), so the rhythm
+  // views show the aligned night bars real families see: ~20:48 → ~06:08,
+  // wobbling a few minutes per day
+  const today = dayStart(nowWall);
+  for (let day = 0; day < 95; day++) {
+    const startWall = today - day * MS_PER_DAY - 3.2 * 3600000 + (day % 3) * 720000;
+    add('sleep', (nowWall - startWall) / 3600000, { durationMin: 560 + (day % 4) * 15 });
+  }
   out.sort((a, b) => b.startWall - a.startWall);
   return out;
 }

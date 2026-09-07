@@ -8,8 +8,11 @@ test('demo log view renders the tracker', async ({ page }) => {
   await expect(page.locator('#logView')).toBeVisible();
   await expect(page.getByText('Day summary')).toBeVisible();
   await expect(page.getByRole('button', { name: /Start|Log now/ })).toBeVisible();
-  // the 24h day-loop inside the summary widget
-  await expect(page.locator('#summary .rhythm-loop')).toBeVisible();
+  // the 24h day strip inside the summary widget, pageable to previous days
+  await expect(page.locator('#summary .day-band')).toBeVisible();
+  await page.getByRole('button', { name: 'Previous day' }).click();
+  await expect(page.locator('#summary .day-name')).toHaveText('Yesterday');
+  await expect(page.locator('#summary .day-band')).toBeVisible();
 });
 
 test('demo stats view renders charts with actual bars', async ({ page }) => {
