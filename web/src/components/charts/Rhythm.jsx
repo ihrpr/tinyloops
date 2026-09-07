@@ -43,11 +43,12 @@ export function DayBand({ day, nowMin }) {
           </text>
         </g>
       ))}
-      <rect x={x0} y={y} width={x1 - x0} height={H} rx={H / 2} fill="var(--chip)" />
+      <rect x={x0} y={y} width={x1 - x0} height={H} rx={6} fill="var(--chip)" />
+      {/* bars, not pills: a short nap must read as a sliver, never a circle */}
       {day.spans.map((sp, i) => (
         <rect key={i} x={X(sp.a)} y={y + 2}
-          width={Math.max(X(sp.b) - X(sp.a), H - 4)} height={H - 4}
-          rx={(H - 4) / 2} fill="var(--accent)">
+          width={Math.max(X(sp.b) - X(sp.a), 4)} height={H - 4}
+          rx={3} fill="var(--accent)">
           <title>{`Sleep ${fmtHm(sp.a)}–${fmtHm(sp.b)}`}</title>
         </rect>
       ))}
@@ -91,11 +92,11 @@ function WeekBands({ days, nowMin }) {
             <text x={x0 - 7} y={y + rowH - 4} textAnchor="end" fontSize="10.5"
               fill={day.today ? 'var(--ink)' : 'var(--muted)'}
               fontWeight={day.today ? 700 : 400}>{day.name}</text>
-            <rect x={x0} y={y} width={x1 - x0} height={rowH} rx={rowH / 2} fill="var(--chip)" />
+            <rect x={x0} y={y} width={x1 - x0} height={rowH} rx={4} fill="var(--chip)" />
             {day.spans.map((sp, j) => (
               <rect key={j} x={X(sp.a)} y={y + 1.5}
-                width={Math.max(X(sp.b) - X(sp.a), rowH - 3)} height={rowH - 3}
-                rx={(rowH - 3) / 2} fill="var(--accent)">
+                width={Math.max(X(sp.b) - X(sp.a), 3)} height={rowH - 3}
+                rx={2.5} fill="var(--accent)">
                 <title>{`Sleep ${fmtHm(sp.a)}–${fmtHm(sp.b)}`}</title>
               </rect>
             ))}

@@ -607,7 +607,7 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 }
 .rhythm-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .rhythm-legend .sw { display: inline-block; }
-.rhythm-legend .sw.sleep { width: 15px; height: 8px; border-radius: 4px; background: var(--accent); }
+.rhythm-legend .sw.sleep { width: 15px; height: 8px; border-radius: 2px; background: var(--accent); }
 .rhythm-legend .sw.feed { width: 8px; height: 8px; border-radius: 99px; background: var(--warm); }
 .rhythm-legend .sw.now { width: 2.5px; height: 12px; border-radius: 2px; background: var(--warm); }
 /* the day strip on top of the Day summary card, one summary below it */
