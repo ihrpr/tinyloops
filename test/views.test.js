@@ -340,6 +340,44 @@ describe('buildRhythm', () => {
     expect(summary.days[0].rows).toEqual([]);
   });
 
+  it('ships the night window with the home settings', () => {
+    // defaults when the sheet has no night rows yet
+    const bare = buildHome([], SETTINGS, NOW);
+    expect(bare.settings.nightStartMin).toBe(19 * 60 + 30);
+    expect(bare.settings.nightEndMin).toBe(7 * 60 + 30);
+    // configured values parse; junk falls back to the default
+    const h = buildHome([], { ...SETTINGS, night_start: '20:00', night_end: 'bogus' }, NOW);
+    expect(h.settings.nightStartMin).toBe(20 * 60);
+    expect(h.settings.nightEndMin).toBe(7 * 60 + 30);
+  });
+
+  it('splits sleep into night (attributed to its morning) and naps', () => {
+    const { summary } = buildHome(newestFirst([
+      // last night, 20:30 → 06:00 — crosses midnight, marked night
+      ev('sleep', '2026-08-28T20:30', { durationMin: 570, side: 'night' }),
+      ev('sleep', '2026-08-29T09:00', { durationMin: 60 }),  // naps: unmarked
+      ev('sleep', '2026-08-29T12:30', { durationMin: 90 }),
+    ]), SETTINGS, NOW);
+    const sleep = summary.rows.find((r) => r.label === 'Sleep');
+    expect(sleep.value).toBe('12h'); // 9h30 night + 2h30 naps
+    const subs = summary.rows.filter((r) => r.kind === 'sub')
+      .map((s) => `${s.label}: ${s.value}`);
+    // the night total includes its pre-midnight part from the previous day
+    expect(subs).toEqual(['Night: 9h 30m', 'Naps: 2× · 2h 30m']);
+
+    // the band paints night spans in their own colour via the flag
+    expect(summary.days[6].spans).toEqual([
+      { a: 0, b: 6 * 60, night: true },
+      { a: 9 * 60, b: 10 * 60 },
+      { a: 12.5 * 60, b: 14 * 60 },
+    ]);
+
+    // that night belongs to today's morning — yesterday's summary must not
+    // count it, and without night-marking in a day there are no subs
+    const yesterday = summary.days[5];
+    expect(yesterday.rows.find((r) => r.label === 'Sleep')).toBeUndefined();
+  });
+
   it('drops the ≈ when no breastfeeds contribute to the milk total', () => {
     const { summary } = buildHome(newestFirst([
       ev('bottle', '2026-08-29T11:00', { amountMl: 80 }),

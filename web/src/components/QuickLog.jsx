@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, localNowIso } from '../api.js';
-import { SideSeg, EatenSeg } from './SideSeg.jsx';
+import { SideSeg, EatenSeg, SleepSeg } from './SideSeg.jsx';
 import { IconChip } from './icons.jsx';
 
 const numOrNull = (v) => (v.trim() === '' ? null : Number(v));
@@ -17,6 +17,8 @@ export function QuickLog({ home, run, onError, onLogged }) {
   const [side, setSide] = useState('');
   const [sideTouched, setSideTouched] = useState(false);
   const [eaten, setEaten] = useState('');
+  const [sleepKind, setSleepKind] = useState(''); // '' = nap
+  const [sleepKindTouched, setSleepKindTouched] = useState(false);
   const [foods, setFoods] = useState(() => new Set());
   const [allFoods, setAllFoods] = useState(false);
   const [bottleBm, setBottleBm] = useState('');
@@ -35,6 +37,20 @@ export function QuickLog({ home, run, onError, onLogged }) {
     if (!types.some((t) => t.key === type)) setType(types[0].key);
   }, [types, type]);
 
+  // Default a sleep to Night when its start falls in the family's night
+  // window (from settings), until the user picks a kind themselves. The
+  // reference time is "now", or the chosen start for an earlier entry.
+  useEffect(() => {
+    if (type !== 'sleep' || sleepKindTouched) return;
+    let ref = earlier && startInput ? new Date(startInput) : new Date();
+    if (isNaN(ref)) ref = new Date();
+    const min = ref.getHours() * 60 + ref.getMinutes();
+    const a = home.settings.nightStartMin ?? 1170; // 19:30
+    const b = home.settings.nightEndMin ?? 450;    // 07:30
+    const night = a > b ? min >= a || min < b : min >= a && min < b;
+    setSleepKind(night ? 'night' : '');
+  }, [type, earlier, startInput, sleepKindTouched, home.settings]);
+
   // Suggest the opposite side from the last feed, until the user picks one.
   useEffect(() => {
     if (type === 'feed' && !sideTouched && !side && home.sideHint?.suggest) {
@@ -52,6 +68,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
 
   function reset() {
     setSide(''); setSideTouched(false); setEaten('');
+    setSleepKind(''); setSleepKindTouched(false);
     setFoods(new Set()); setAllFoods(false);
     setBottleBm(''); setBottleF(''); setAmount(''); setNotes('');
     setEarlier(false); setStartInput(''); setDurInput('');
@@ -60,6 +77,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
   async function submit() {
     const p = { type, notes: notes.trim() };
     if (type === 'feed') p.side = side;
+    if (type === 'sleep') p.side = sleepKind;
     if (type === 'solid') {
       p.side = eaten;
       // chips + anything typed → the same comma-separated food string
@@ -119,6 +137,14 @@ export function QuickLog({ home, run, onError, onLogged }) {
         <>
           <div className="side-hint">{home.sideHint?.text}</div>
           <SideSeg value={side} onChange={(v) => { setSide(v); setSideTouched(true); }} />
+        </>
+      )}
+
+      {type === 'sleep' && (
+        <>
+          <div className="side-hint">Nap or night sleep?</div>
+          <SleepSeg value={sleepKind}
+            onChange={(v) => { setSleepKind(v); setSleepKindTouched(true); }} />
         </>
       )}
 

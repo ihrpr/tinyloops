@@ -35,6 +35,10 @@ export const GROWTH_HEADERS = [
 export const DEFAULT_SETTINGS = {
   breastfeed_ml: 60,
   enabled_types: 'feed,bottle,solid,sleep,play,pump,wet,dirty',
+  // the family's night window (HH:MM wall clock): sleeps started inside it
+  // default to Night when logging, and it bounds the night-stretch stats
+  night_start: '19:30',
+  night_end: '07:30',
 };
 
 export const sheetUrl = (spreadsheetId) =>

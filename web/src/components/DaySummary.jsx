@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { IconChip } from './icons.jsx';
-import { DayBand, Legend } from './charts/Rhythm.jsx';
+import { DayBand, Legend, hasNight } from './charts/Rhythm.jsx';
 
 // The day-summary widget from /api/home: a day drawn as a 24h line on top,
 // the summary rows below — the SAME layout for every day. Paging back (the
@@ -28,7 +28,8 @@ export function DaySummary({ summary, onEditNursing }) {
               onClick={() => setIdx(idx + 1)}>›</button>
           </div>
           <DayBand day={day} nowMin={summary.nowMin} />
-          <Legend />
+          {/* legend stays stable while paging: keyed to the whole week */}
+          <Legend night={hasNight(days)} />
         </div>
       )}
       {rows.length === 0 && <div className="empty-note">Nothing logged this day.</div>}

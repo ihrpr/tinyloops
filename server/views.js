@@ -74,16 +74,22 @@ const sideName = (s) => (s === 'L' ? 'left' : s === 'R' ? 'right' : 'both sides'
 
 /** Sleep segments overlapping [start, end), as minutes from `start`, clipped
  *  to the window and to now (open sleeps run to now). Sorted by start. Feeds
- *  the day-loop widget on the home screen and the rhythm view on stats. */
-function sleepSegments(events, start, end, nowWall) {
+ *  the day-strip widget on the home screen and the rhythm view on stats.
+ *  `cat` narrows to one category: 'night' (side === 'night') or 'nap' (the
+ *  default — any sleep not marked night). */
+function sleepSegments(events, start, end, nowWall, cat) {
   const segs = [];
   for (const e of events) {
     if (e.type !== 'sleep' || e.startWall == null) continue;
+    if (cat === 'night' && e.side !== 'night') continue;
+    if (cat === 'nap' && e.side === 'night') continue;
     const s = Math.max(e.startWall, start);
     const en = Math.min(e.endWall || nowWall, end);
     if (en <= s) continue;
     segs.push({ a: Math.round((s - start) / MS_PER_MIN),
-      b: Math.round((en - start) / MS_PER_MIN) });
+      b: Math.round((en - start) / MS_PER_MIN),
+      // the flag lets the bands paint night sleep in its own colour
+      ...(e.side === 'night' && { night: true }) });
   }
   return segs.sort((x, y) => x.a - y.a);
 }
@@ -133,6 +139,9 @@ function eventDetails(e) {
   if (e.type === 'solid') {
     // notes already carry the food, so only the eaten amount is added here
     if (EATEN[e.side]) parts.push(EATEN[e.side]);
+  } else if (e.type === 'sleep') {
+    // naps are the unmarked default — only 'night' is worth a word
+    if (e.side === 'night') parts.push('night');
   } else if (e.side) parts.push(sideName(e.side));
   if (e.type === 'bottle') {
     if (e.amountMl) parts.push(`${e.amountMl}ml milk`);
@@ -216,6 +225,9 @@ export function buildHome(events, settings, nowWall) {
     settings: {
       breastfeedMl: Number(settings.breastfeed_ml) || 60,
       enabledTypes: ALL_TYPES.filter((k) => en.has(k)),
+      // minutes-of-day; the client preselects Night for sleeps started inside
+      nightStartMin: nightWindow(settings).startMin,
+      nightEndMin: nightWindow(settings).endMin,
     },
     sideHint,
     solidFoods: en.has('solid') ? foodChips(events) : [],
@@ -289,11 +301,18 @@ function summaryRows(events, s, en, assumedMl, nowWall, isToday) {
       [solids.length ? `${solids.length}×` : '', foodsThatDay.join(', ')]);
   }
 
-  // sleep total from the same clipped segments the band draws, so the row
-  // and the picture can never disagree (a sleep crossing midnight counts
-  // its pre-midnight part yesterday and its tail today)
-  const sleepMin = sleepSegments(events, s, dayEnd, nowWall)
+  // sleep splits into two categories. Naps (the unmarked default) belong to
+  // the calendar day. Night-marked sleep belongs to the MORNING it ends on:
+  // it's counted over a noon-to-noon window, so "Night" on day D is the
+  // whole night that led into D — including its pre-midnight part from the
+  // previous day. Tonight's sleep, still running at bedtime, counts toward
+  // tomorrow. Subs appear only once night-marking is in use.
+  const napSegs = sleepSegments(events, s, dayEnd, nowWall, 'nap');
+  const napMin = napSegs.reduce((a, g) => a + (g.b - g.a), 0);
+  const nightMin = sleepSegments(events,
+    s - MS_PER_DAY / 2, s + MS_PER_DAY / 2, nowWall, 'night')
     .reduce((a, g) => a + (g.b - g.a), 0);
+  const sleepMin = napMin + nightMin;
   if (en.has('sleep') || sleepMin) {
     const sleepsAll = allOf('sleep');
     const sleepingNow = sleepsAll.some((e) => !e.endWall);
@@ -303,6 +322,10 @@ function summaryRows(events, s, en, assumedMl, nowWall, isToday) {
         : sleepingNow ? 'sleeping now'
         : lastWake ? 'awake for ' + fmtMin(Math.max(0, Math.floor((nowWall - lastWake.endWall) / MS_PER_MIN))) : '',
       [sleepMin ? fmtMin(sleepMin) : '']);
+    if (nightMin) {
+      pushSub('Night', fmtMin(nightMin));
+      if (napMin) pushSub('Naps', `${napSegs.length}× · ${fmtMin(napMin)}`);
+    }
   }
 
   const playMin = events.filter((e) => e.type === 'play')
@@ -480,8 +503,22 @@ export function buildStats(events, settings, fromWall, toWall) {
 
 // ---------- rhythm (today's loop, stacked week bands, trend tiles) ----------
 
-const NIGHT_START_H = 19; // the "night" window for the longest-stretch tile:
-const NIGHT_END_H = 7;    // 19:00 → 07:00 the next morning
+const parseHm = (v, dflt) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v ?? '').trim());
+  if (!m) return dflt;
+  const min = Number(m[1]) * 60 + Number(m[2]);
+  return min < 1440 && Number(m[2]) < 60 ? min : dflt;
+};
+
+/** The family's configured night window as minutes-of-day; defaults to
+ *  19:30 → 07:30. Drives the Night default when logging a sleep and bounds
+ *  the night-stretch / wake-window stats. */
+export function nightWindow(settings) {
+  return {
+    startMin: parseHm(settings.night_start, 19 * 60 + 30),
+    endMin: parseHm(settings.night_end, 7 * 60 + 30),
+  };
+}
 
 const median = (xs) => {
   if (!xs.length) return null;
@@ -492,7 +529,7 @@ const median = (xs) => {
 
 /** Averages over the 7 complete days starting at w0 (w0 = a day start).
  *  Days before the family's first-ever entry don't dilute the averages. */
-function rhythmWindow(events, w0, firstDay, nowWall) {
+function rhythmWindow(events, w0, firstDay, nowWall, nw) {
   const covered = [];
   for (let i = 0; i < 7; i++) {
     const s = w0 + i * MS_PER_DAY;
@@ -508,19 +545,21 @@ function rhythmWindow(events, w0, firstDay, nowWall) {
     sleepMin += segs.reduce((a, g) => a + (g.b - g.a), 0);
     feedCount += feedMinutes(events, s, s + MS_PER_DAY).length;
 
-    // the night that *ends* this morning: yesterday 19:00 → today 07:00
+    // the night that *ends* this morning, over the configured night window
+    // (default yesterday 19:30 → today 07:30)
     const night = sleepSegments(events,
-      s - (24 - NIGHT_START_H) * 60 * MS_PER_MIN,
-      s + NIGHT_END_H * 60 * MS_PER_MIN, nowWall);
+      s - MS_PER_DAY + nw.startMin * MS_PER_MIN,
+      s + nw.endMin * MS_PER_MIN, nowWall);
     const longest = Math.max(0, ...night.map((g) => g.b - g.a));
     if (longest > 0) stretches.push(longest);
 
-    // wake windows: gaps between consecutive sleeps, entirely in 07:00–19:00;
-    // 10min–6h keeps double-logs and missing-data holes out of the median
+    // wake windows: gaps between consecutive sleeps, entirely inside the
+    // configured daytime; 10min–6h keeps double-logs and missing-data holes
+    // out of the median
     for (let i = 1; i < segs.length; i++) {
       const gap = segs[i].a - segs[i - 1].b;
       if (gap >= 10 && gap <= 360 &&
-        segs[i - 1].b >= NIGHT_END_H * 60 && segs[i].a <= NIGHT_START_H * 60) {
+        segs[i - 1].b >= nw.endMin && segs[i].a <= nw.startMin) {
         wakes.push(gap);
       }
     }
@@ -575,8 +614,9 @@ export function buildRhythm(events, settings, nowWall) {
   let firstWall = Infinity;
   for (const e of events) if (e.startWall != null && e.startWall < firstWall) firstWall = e.startWall;
   const firstDay = firstWall === Infinity ? today : dayStart(firstWall);
-  const cur = rhythmWindow(events, today - 7 * MS_PER_DAY, firstDay, nowWall);
-  const prev = rhythmWindow(events, today - 14 * MS_PER_DAY, firstDay, nowWall);
+  const nw = nightWindow(settings);
+  const cur = rhythmWindow(events, today - 7 * MS_PER_DAY, firstDay, nowWall, nw);
+  const prev = rhythmWindow(events, today - 14 * MS_PER_DAY, firstDay, nowWall, nw);
 
   const tiles = [];
   if (cur) {

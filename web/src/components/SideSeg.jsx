@@ -26,3 +26,11 @@ const EATEN = [['taste', 'Just a taste'], ['some', 'Some'], ['lots', 'Lots']];
 export function EatenSeg({ value, onChange }) {
   return <Seg options={EATEN} value={value} onChange={onChange} />;
 }
+
+// Nap or night sleep. '' is the nap default (costs nothing in the sheet), so
+// the summary can total the night — across midnight — apart from the naps.
+const SLEEP_KIND = [['', 'Nap'], ['night', 'Night']];
+
+export function SleepSeg({ value, onChange }) {
+  return <Seg options={SLEEP_KIND} value={value} onChange={onChange} />;
+}

@@ -96,7 +96,8 @@ function generateDemo(nowWall) {
   const today = dayStart(nowWall);
   for (let day = 0; day < 95; day++) {
     const startWall = today - day * MS_PER_DAY - 3.2 * 3600000 + (day % 3) * 720000;
-    add('sleep', (nowWall - startWall) / 3600000, { durationMin: 560 + (day % 4) * 15 });
+    add('sleep', (nowWall - startWall) / 3600000,
+      { durationMin: 560 + (day % 4) * 15, side: 'night' });
   }
   out.sort((a, b) => b.startWall - a.startWall);
   return out;

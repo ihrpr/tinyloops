@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api.js';
-import { SideSeg, EatenSeg } from './SideSeg.jsx';
+import { SideSeg, EatenSeg, SleepSeg } from './SideSeg.jsx';
 
 const numOrNull = (v) => (String(v).trim() === '' ? null : Number(v));
 
@@ -21,9 +21,10 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
 
   async function save() {
     if (!start) return onError('Please set a valid start time.');
-    // side carries the nursing side for feeds and the eaten amount for
-    // solids; the server validates each type's own vocabulary
-    const keepSide = type === 'feed' || type === 'solid';
+    // side carries the nursing side for feeds, the eaten amount for solids
+    // and night-vs-nap for sleeps; the server validates each type's own
+    // vocabulary
+    const keepSide = type === 'feed' || type === 'solid' || type === 'sleep';
     const p = { id: raw.id, type, start, notes: notes.trim(), side: keepSide ? side : '' };
     if (meta.timed) {
       if (numOrNull(dur) != null) p.durationMin = numOrNull(dur);
@@ -58,6 +59,7 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
 
         {type === 'feed' && <SideSeg value={side} onChange={setSide} />}
         {type === 'solid' && <EatenSeg value={side} onChange={setSide} />}
+        {type === 'sleep' && <SleepSeg value={side} onChange={setSide} />}
 
         {type === 'bottle' && (
           <div>

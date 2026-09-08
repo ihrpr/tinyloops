@@ -140,4 +140,9 @@ describe('side vocabulary per type', () => {
     expect(eventParams({ type: 'feed', start: '2026-08-29T12:00', side: 'L' }).side).toBe('L');
     expect(eventParams({ type: 'feed', start: '2026-08-29T12:00', side: 'lots' }).side).toBe('');
   });
+  it('sleeps accept night; everything else is the nap default', () => {
+    expect(eventParams({ type: 'sleep', start: '2026-08-29T20:00', side: 'night' }).side).toBe('night');
+    expect(eventParams({ type: 'sleep', start: '2026-08-29T12:00', side: 'nap' }).side).toBe('');
+    expect(eventParams({ type: 'sleep', start: '2026-08-29T12:00', side: 'L' }).side).toBe('');
+  });
 });

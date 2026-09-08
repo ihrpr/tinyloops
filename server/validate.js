@@ -95,9 +95,12 @@ export function eventParams(body) {
   if (!TYPES[type]) throw new ValidationError('Unknown activity type.');
   const startWall = isoToWallMs(body.start);
   if (startWall == null) throw new ValidationError('Please set a valid start time.');
-  // the side column is dual-purpose: nursing side for feeds, how much was
-  // eaten for solids — each type accepts only its own vocabulary
-  const sides = type === 'solid' ? ['taste', 'some', 'lots'] : ['L', 'R', 'both'];
+  // the side column is multi-purpose: nursing side for feeds, how much was
+  // eaten for solids, night-vs-nap for sleeps — each type accepts only its
+  // own vocabulary. A sleep without 'night' is a nap and stores '' so the
+  // default costs nothing in the sheet.
+  const sides = type === 'solid' ? ['taste', 'some', 'lots']
+    : type === 'sleep' ? ['night'] : ['L', 'R', 'both'];
   const p = {
     type, startWall,
     side: sides.includes(body.side) ? body.side : '',

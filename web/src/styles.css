@@ -22,6 +22,7 @@
   --s1: #4d80d2; /* breastfed */
   --s2: #2c5e3c; /* bottle milk */
   --s3: #dd9448; /* formula */
+  --sleep-night: #274f30; /* night sleep bars — deeper fern than nap/--accent */
   --radius: 14px;
 }
 
@@ -44,6 +45,7 @@
     --s1: #96bdf2;
     --s2: #48865a;
     --s3: #f2bb52;
+    --sleep-night: #558a61;
   }
 }
 
@@ -608,6 +610,7 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 .rhythm-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .rhythm-legend .sw { display: inline-block; }
 .rhythm-legend .sw.sleep { width: 15px; height: 8px; border-radius: 2px; background: var(--accent); }
+.rhythm-legend .sw.night { width: 15px; height: 8px; border-radius: 2px; background: var(--sleep-night); }
 .rhythm-legend .sw.feed { width: 8px; height: 8px; border-radius: 99px; background: var(--warm); }
 .rhythm-legend .sw.now { width: 2.5px; height: 12px; border-radius: 2px; background: var(--warm); }
 /* the day strip on top of the Day summary card, one summary below it */
@@ -624,6 +627,9 @@ details.platform[open] summary::after { transform: rotate(225deg); }
   min-width: 130px; text-align: center;
 }
 .day-band { display: block; width: 100%; height: auto; }
+.night-range { display: flex; gap: 10px; }
+.night-range .f { flex: 1; margin-top: 0; }
+.night-range input { display: block; width: 100%; margin-top: 4px; }
 .sum-row.sub { padding: 2px 0 2px 38px; }
 .sum-row.sub .lbl { font-size: 13px; }
 .sum-row.sub .v { font-weight: 500; }

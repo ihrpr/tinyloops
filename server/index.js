@@ -319,9 +319,18 @@ app.put('/api/settings', async (c) => {
   const list = (Array.isArray(body.enabledTypes) ? body.enabledTypes : [])
     .filter((k) => TYPES[k]);
   if (!list.length) throw new UserFacingError('Keep at least one activity visible.');
+  // night window: HH:MM strings straight into the sheet (readable contract)
+  const hm = /^([01]?\d|2[0-3]):[0-5]\d$/;
+  const nightStart = String(body.nightStart || '');
+  const nightEnd = String(body.nightEnd || '');
+  if (!hm.test(nightStart) || !hm.test(nightEnd)) {
+    throw new UserFacingError('Please set the night start and end times.');
+  }
   await sheets.setSettings(c, user.sheet_id, [
     ['breastfeed_ml', Math.round(ml)],
     ['enabled_types', Object.keys(TYPES).filter((k) => list.includes(k)).join(',')],
+    ['night_start', nightStart],
+    ['night_end', nightEnd],
   ]);
   return c.json({ home: await freshHome(c) });
 });

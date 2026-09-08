@@ -12,15 +12,31 @@ function fmtHm(min) {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-export function Legend() {
+// `night`: whether night-marked sleep appears in the accompanying chart —
+// families who never mark nights keep the single Sleep swatch.
+export function Legend({ night }) {
   return (
     <div className="rhythm-legend">
-      <span><i className="sw sleep" />Sleep</span>
+      {night ? (
+        <>
+          <span><i className="sw night" />Night</span>
+          <span><i className="sw sleep" />Nap</span>
+        </>
+      ) : (
+        <span><i className="sw sleep" />Sleep</span>
+      )}
       <span><i className="sw feed" />Feed</span>
       <span><i className="sw now" />Now</span>
     </div>
   );
 }
+
+const spanFill = (sp) => (sp.night ? 'var(--sleep-night)' : 'var(--accent)');
+const spanName = (sp) => (sp.night ? 'Night sleep' : 'Sleep');
+
+/** True when any day's spans carry night-marked sleep. */
+export const hasNight = (days) =>
+  days.some((day) => day.spans.some((sp) => sp.night));
 
 // ---- one day on a 24h line (the home summary widget) ----
 
@@ -48,8 +64,8 @@ export function DayBand({ day, nowMin }) {
       {day.spans.map((sp, i) => (
         <rect key={i} x={X(sp.a)} y={y + 2}
           width={Math.max(X(sp.b) - X(sp.a), 4)} height={H - 4}
-          rx={3} fill="var(--accent)">
-          <title>{`Sleep ${fmtHm(sp.a)}–${fmtHm(sp.b)}`}</title>
+          rx={3} fill={spanFill(sp)}>
+          <title>{`${spanName(sp)} ${fmtHm(sp.a)}–${fmtHm(sp.b)}`}</title>
         </rect>
       ))}
       {day.feeds.map((m, i) => (
@@ -96,8 +112,8 @@ function WeekBands({ days, nowMin }) {
             {day.spans.map((sp, j) => (
               <rect key={j} x={X(sp.a)} y={y + 1.5}
                 width={Math.max(X(sp.b) - X(sp.a), 3)} height={rowH - 3}
-                rx={2.5} fill="var(--accent)">
-                <title>{`Sleep ${fmtHm(sp.a)}–${fmtHm(sp.b)}`}</title>
+                rx={2.5} fill={spanFill(sp)}>
+                <title>{`${spanName(sp)} ${fmtHm(sp.a)}–${fmtHm(sp.b)}`}</title>
               </rect>
             ))}
             {day.feeds.map((m, j) => (
@@ -126,7 +142,7 @@ export function Rhythm({ rhythm }) {
       <div className="card">
         <h3>Last 7 days</h3>
         <WeekBands days={rhythm.days} nowMin={rhythm.nowMin} />
-        <Legend />
+        <Legend night={hasNight(rhythm.days)} />
       </div>
       {rhythm.tiles.length > 0 && (
         <div className="rhythm-tiles">
