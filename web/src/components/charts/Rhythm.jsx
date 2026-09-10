@@ -86,13 +86,18 @@ export function DayBand({ day, nowMin }) {
 
 // ---- the week, one 24h band per day ----
 
-function WeekBands({ days, nowMin }) {
-  const W = 380, rowH = 15, gap = 12, x0 = 44, x1 = W - 8;
-  const H = 20 + days.length * (rowH + gap);
+function WeekBands({ days, nowMin, labelStep = 1 }) {
+  // rows shrink as the picked range grows, so 92 days still fit on a phone
+  const nDays = days.length;
+  const rowH = nDays <= 7 ? 15 : nDays <= 21 ? 11 : 8;
+  const gap = nDays <= 7 ? 12 : nDays <= 21 ? 6 : 3;
+  const dotR = nDays <= 7 ? 3.4 : nDays <= 21 ? 2.7 : 2.1;
+  const W = 380, x0 = 44, x1 = W - 8;
+  const H = 20 + nDays * (rowH + gap);
   const X = (min) => x0 + (min / MIN_DAY) * (x1 - x0);
   return (
     <svg className="rhythm-week" viewBox={`0 0 ${W} ${H}`} role="img"
-      aria-label="Sleeps and feeds over the last 7 days, one row per day">
+      aria-label={`Sleeps and feeds, one row per day, ${nDays} days`}>
       {[0, 6, 12, 18, 24].map((h) => (
         <g key={h}>
           <line x1={X(h * 60)} y1={14} x2={X(h * 60)} y2={H - 8}
@@ -105,25 +110,28 @@ function WeekBands({ days, nowMin }) {
         const y = 20 + i * (rowH + gap);
         return (
           <g key={day.date}>
-            <text x={x0 - 7} y={y + rowH - 4} textAnchor="end" fontSize="10.5"
-              fill={day.today ? 'var(--ink)' : 'var(--muted)'}
-              fontWeight={day.today ? 700 : 400}>{day.name}</text>
-            <rect x={x0} y={y} width={x1 - x0} height={rowH} rx={4} fill="var(--chip)" />
+            {(day.today || i % labelStep === 0) && (
+              <text x={x0 - 7} y={y + rowH / 2 + 3.5} textAnchor="end" fontSize="10"
+                fill={day.today ? 'var(--ink)' : 'var(--muted)'}
+                fontWeight={day.today ? 700 : 400}>{day.name}</text>
+            )}
+            <rect x={x0} y={y} width={x1 - x0} height={rowH} rx={Math.min(4, rowH / 2)}
+              fill="var(--chip)" />
             {day.spans.map((sp, j) => (
               <rect key={j} x={X(sp.a)} y={y + 1.5}
                 width={Math.max(X(sp.b) - X(sp.a), 3)} height={rowH - 3}
-                rx={2.5} fill={spanFill(sp)}>
+                rx={Math.min(2.5, (rowH - 3) / 2)} fill={spanFill(sp)}>
                 <title>{`${spanName(sp)} ${fmtHm(sp.a)}–${fmtHm(sp.b)}`}</title>
               </rect>
             ))}
             {day.feeds.map((m, j) => (
-              <circle key={j} cx={X(m)} cy={y + rowH / 2} r="3.4" fill="var(--warm)"
-                stroke="var(--card)" strokeWidth="1.4">
+              <circle key={j} cx={X(m)} cy={y + rowH / 2} r={dotR} fill="var(--warm)"
+                stroke="var(--card)" strokeWidth={dotR / 2.4}>
                 <title>{`Feed ${fmtHm(m)}`}</title>
               </circle>
             ))}
             {day.today && (
-              <line x1={X(nowMin)} y1={y - 4} x2={X(nowMin)} y2={y + rowH + 4}
+              <line x1={X(nowMin)} y1={y - 3} x2={X(nowMin)} y2={y + rowH + 3}
                 stroke="var(--warm)" strokeWidth="2" strokeLinecap="round" />
             )}
           </g>
@@ -140,8 +148,9 @@ export function Rhythm({ rhythm }) {
   return (
     <>
       <div className="card">
-        <h3>Last 7 days</h3>
-        <WeekBands days={rhythm.days} nowMin={rhythm.nowMin} />
+        <h3>Day by day</h3>
+        <WeekBands days={rhythm.days} nowMin={rhythm.nowMin}
+          labelStep={rhythm.labelStep} />
         <Legend night={hasNight(rhythm.days)} />
       </div>
       {rhythm.tiles.length > 0 && (

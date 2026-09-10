@@ -584,32 +584,36 @@ function minDelta(cur, prev) {
 const fmtPerDay = (x) => (Math.round(x * 10) / 10).toFixed(1).replace(/\.0$/, '');
 
 /**
- * The week-shape payload for stats: the last 7 days as stacked bands plus
- * week-over-week trend tiles (today's 24h loop lives in the home summary).
- * All minutes-of-day and all clipping happen here — the client only draws.
- * Tiles compare the last 7 COMPLETE days (ending yesterday) with the 7
- * before, so today's partial day never skews an average.
+ * The rhythm payload for stats: every day of the PICKED range [fromWall,
+ * toWall] as a stacked band, plus week-over-week trend tiles. All
+ * minutes-of-day and all clipping happen here — the client only draws.
+ * Tiles stay anchored to the last 7 COMPLETE days vs the 7 before (their
+ * deltas literally say "vs last week"), so only the bands follow the picker.
  */
-export function buildRhythm(events, settings, nowWall) {
+export function buildRhythm(events, settings, nowWall, fromWall, toWall) {
   const today = dayStart(nowWall);
   const nowMin = Math.round((nowWall - today) / MS_PER_MIN);
-
-  const horizon = today - 14 * MS_PER_DAY;
-  const any = events.some((e) => e.startWall != null && e.startWall >= horizon &&
-    (e.type === 'sleep' || e.type === 'feed' || e.type === 'bottle'));
-  if (!any) return { any: false };
+  const n = Math.round((toWall - fromWall) / MS_PER_DAY) + 1;
 
   const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const s = today - i * MS_PER_DAY;
+  for (let i = 0; i < n; i++) {
+    const s = fromWall + i * MS_PER_DAY;
+    const dd = d(s);
     days.push({
       date: wallMsToDate(s),
-      name: i === 0 ? 'Today' : DAYS[d(s).getUTCDay()],
+      name: s === today ? 'Today'
+        : n <= 7 ? DAYS[dd.getUTCDay()]
+        : `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`,
       spans: sleepSegments(events, s, s + MS_PER_DAY, nowWall),
       feeds: feedMinutes(events, s, s + MS_PER_DAY),
-      today: i === 0,
+      today: s === today,
     });
   }
+  // hide the bands when the picked range holds nothing to draw
+  const any = days.some((day) => day.spans.length || day.feeds.length);
+  if (!any) return { any: false };
+  // label crowding control, same steps as the milk chart
+  const labelStep = n <= 14 ? 1 : n <= 31 ? 2 : n <= 45 ? 5 : 10;
 
   let firstWall = Infinity;
   for (const e of events) if (e.startWall != null && e.startWall < firstWall) firstWall = e.startWall;
@@ -636,7 +640,7 @@ export function buildRhythm(events, settings, nowWall) {
     }
   }
 
-  return { any: true, nowMin, days, tiles };
+  return { any: true, nowMin, days, labelStep, tiles };
 }
 
 /** One day's entries (the /api/days/:date endpoint). */

@@ -276,13 +276,17 @@ describe('solids food chips (home payload)', () => {
   });
 });
 
+// buildRhythm draws whatever range the stats date picker holds
+const FROM7 = isoToWallMs('2026-08-23');
+const TO7 = isoToWallMs('2026-08-29');
+
 describe('buildRhythm', () => {
-  it('hides the section when nothing relevant was logged recently', () => {
-    expect(buildRhythm([], SETTINGS, NOW).any).toBe(false);
-    expect(buildRhythm(newestFirst([ev('wet', '2026-08-29T09:00')]), SETTINGS, NOW).any)
-      .toBe(false);
+  it('hides the section when the picked range has nothing to draw', () => {
+    expect(buildRhythm([], SETTINGS, NOW, FROM7, TO7).any).toBe(false);
+    expect(buildRhythm(newestFirst([ev('wet', '2026-08-29T09:00')]),
+      SETTINGS, NOW, FROM7, TO7).any).toBe(false);
     expect(buildRhythm(newestFirst([ev('sleep', '2026-08-01T20:00', { durationMin: 60 })]),
-      SETTINGS, NOW).any).toBe(false); // >14 days old
+      SETTINGS, NOW, FROM7, TO7).any).toBe(false); // outside the range
   });
 
   it('splits sleeps at midnight and clips open sleeps to now', () => {
@@ -290,7 +294,7 @@ describe('buildRhythm', () => {
       ev('sleep', '2026-08-28T22:00', { durationMin: 240 }), // 22:00 → 02:00
       ev('sleep', '2026-08-29T13:00', { open: true }),       // running, now = 14:00
       ev('feed', '2026-08-29T09:00', { durationMin: 10 }),
-    ]), SETTINGS, NOW);
+    ]), SETTINGS, NOW, FROM7, TO7);
     expect(r.any).toBe(true);
     expect(r.nowMin).toBe(14 * 60);
     const fri = r.days[5], sat = r.days[6];
@@ -300,6 +304,17 @@ describe('buildRhythm', () => {
     expect(sat.today).toBe(true);
     expect(sat.spans).toEqual([{ a: 0, b: 2 * 60 }, { a: 13 * 60, b: 14 * 60 }]);
     expect(sat.feeds).toEqual([9 * 60]);
+  });
+
+  it('follows the picker: one band per day of the range, labels stepped', () => {
+    const r = buildRhythm(newestFirst([
+      ev('sleep', '2026-08-10T13:00', { durationMin: 60 }),
+    ]), SETTINGS, NOW, isoToWallMs('2026-08-01'), isoToWallMs('2026-08-29'));
+    expect(r.days).toHaveLength(29);
+    expect(r.labelStep).toBe(2);
+    expect(r.days[0].name).toBe('1/8'); // long ranges label by date, not weekday
+    expect(r.days[9].spans).toEqual([{ a: 13 * 60, b: 14 * 60 }]);
+    expect(r.days[28].name).toBe('Today');
   });
 
   it('ships a pageable week of day strips in the home summary', () => {
@@ -405,7 +420,7 @@ describe('buildRhythm', () => {
       evs.push(ev('feed', `2026-08-${dd}T08:00`, { durationMin: 10 }));
       evs.push(ev('bottle', `2026-08-${dd}T15:00`, { amountMl: 100 }));
     }
-    const r = buildRhythm(newestFirst(evs), SETTINGS, NOW);
+    const r = buildRhythm(newestFirst(evs), SETTINGS, NOW, FROM7, TO7);
     const tile = (label) => r.tiles.find((t) => t.label === label);
 
     // current window (22–28 Aug) has 12h/day; the previous window's first day
