@@ -12,7 +12,7 @@
 import { Hono } from 'hono';
 import { login, callback, logout, requireSession, accessToken, NeedsSignIn } from './auth.js';
 import * as sheets from './sheets.js';
-import { buildHome, buildStats, buildDay, buildRhythm, TYPES, MAX_STATS_DAYS } from './views.js';
+import { buildHome, buildStats, buildDay, buildRhythm, buildExplore, TYPES, MAX_STATS_DAYS } from './views.js';
 import { buildGrowth } from './growth.js';
 import { isoToWallMs, dayStart, MS_PER_DAY } from './time.js';
 import { eventParams, shareEmail, growthParams, profileParams } from './validate.js';
@@ -151,6 +151,7 @@ app.use('/api/*', async (c, next) => {
     if (!r) return c.json({ error: 'Invalid date range.' }, 400);
     const stats = buildStats(events, DEMO_SETTINGS, r.from, r.to);
     stats.rhythm = buildRhythm(events, DEMO_SETTINGS, now, r.from, r.to);
+    stats.explore = buildExplore(events, DEMO_SETTINGS, now, r.from, r.to);
     return c.json(stats);
   }
   if (path.startsWith('/api/days/')) {
@@ -237,6 +238,7 @@ app.get('/api/stats', async (c) => {
   // rhythm rides along on /api/stats: it needs no extra sheet read, and a
   // separate endpoint would double the Google quota cost of the Stats page
   stats.rhythm = buildRhythm(state.events, state.settings, nowWall(c), r.from, r.to);
+  stats.explore = buildExplore(state.events, state.settings, nowWall(c), r.from, r.to);
   return c.json(stats);
 });
 

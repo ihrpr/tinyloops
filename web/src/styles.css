@@ -627,6 +627,9 @@ details.platform[open] summary::after { transform: rotate(225deg); }
   min-width: 130px; text-align: center;
 }
 .day-band { display: block; width: 100%; height: auto; }
+.explore-pick { display: flex; align-items: center; gap: 8px; font-size: 13px;
+  color: var(--muted); margin-bottom: 4px; }
+.explore-pick select { flex: 0 1 auto; padding: 6px 10px; font-size: 14px; }
 .night-range { display: flex; gap: 10px; }
 .night-range .f { flex: 1; margin-top: 0; }
 .night-range input { display: block; width: 100%; margin-top: 4px; }

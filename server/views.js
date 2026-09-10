@@ -643,6 +643,112 @@ export function buildRhythm(events, settings, nowWall, fromWall, toWall) {
   return { any: true, nowMin, days, labelStep, tiles };
 }
 
+// ---------- night explorer (scatter: night stretch vs the previous day) ----------
+
+// `kind` tells the client how to format axis ticks: clock = minutes-of-day,
+// clock12 = minutes-after-noon (bedtimes cross midnight), dur = minutes,
+// ml = millilitres. `less`/`more` word the verdict's direction.
+const EXPLORE_VARS = [
+  { key: 'lastNap', label: 'Last nap ended', kind: 'clock',
+    less: 'earlier last naps', more: 'later last naps' },
+  { key: 'napMin', label: 'Daytime sleep', kind: 'dur',
+    less: 'less daytime sleep', more: 'more daytime sleep' },
+  { key: 'milkMl', label: 'Milk taken', kind: 'ml',
+    less: 'less milk', more: 'more milk' },
+  { key: 'bedMin', label: 'Bedtime', kind: 'clock12',
+    less: 'earlier bedtimes', more: 'later bedtimes' },
+];
+
+function pearson(pairs) {
+  const n = pairs.length;
+  const mx = pairs.reduce((a, p) => a + p[0], 0) / n;
+  const my = pairs.reduce((a, p) => a + p[1], 0) / n;
+  let num = 0, dx = 0, dy = 0;
+  for (const [x, y] of pairs) {
+    num += (x - mx) * (y - my);
+    dx += (x - mx) ** 2;
+    dy += (y - my) ** 2;
+  }
+  return dx && dy ? num / Math.sqrt(dx * dy) : 0;
+}
+
+/** One worded verdict per variable — deliberately correlational language,
+ *  never causal, and silent below 8 nights (too few to lean on). */
+function exploreVerdict(v, pairs) {
+  if (pairs.length < 8) return 'Not enough nights in this range to say.';
+  const r = pearson(pairs);
+  if (Math.abs(r) < 0.25) {
+    return `No clear link between ${v.label.toLowerCase()} and the night here.`;
+  }
+  const lean = Math.abs(r) >= 0.5 ? 'A clear lean' : 'A slight lean';
+  return `${lean}: ${r > 0 ? v.more : v.less} went with longer nights here.`;
+}
+
+/**
+ * The scatter payload: one point per night of the picked range — y is that
+ * night's longest unbroken stretch, the x variables describe the day that
+ * LED INTO the night (its last nap, daytime sleep, milk, bedtime). Verdicts
+ * arrive as sentences; the client only draws and formats ticks.
+ */
+export function buildExplore(events, settings, nowWall, fromWall, toWall) {
+  const nw = nightWindow(settings);
+  const assumedMl = Number(settings.breastfeed_ml) || 60;
+  const today = dayStart(nowWall);
+  const nights = [];
+  for (let s = fromWall; s <= Math.min(toWall, today); s += MS_PER_DAY) {
+    // the night that ends on morning `s`, over the configured night window
+    const segs = sleepSegments(events,
+      s - MS_PER_DAY + nw.startMin * MS_PER_MIN,
+      s + nw.endMin * MS_PER_MIN, nowWall);
+    if (!segs.length) continue;
+    const y = Math.max(...segs.map((g) => g.b - g.a));
+
+    // the previous day's daytime, bounded by the same window
+    const prev = s - MS_PER_DAY;
+    const daySegs = sleepSegments(events,
+      prev + nw.endMin * MS_PER_MIN,
+      prev + nw.startMin * MS_PER_MIN, nowWall);
+    const started = (t) => events.filter((e) => e.type === t &&
+      e.startWall != null && e.startWall >= prev && e.startWall < s);
+    const bottles = started('bottle');
+    const dd = d(s);
+    nights.push({
+      date: wallMsToDate(s),
+      label: `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}`,
+      y,
+      // minutes-of-day; day segments are relative to the daytime window start
+      lastNap: daySegs.length ? nw.endMin + daySegs[daySegs.length - 1].b : null,
+      napMin: daySegs.reduce((a, g) => a + (g.b - g.a), 0),
+      milkMl: started('feed').length * assumedMl
+        + bottles.reduce((a, e) => a + (e.amountMl || 0) + (e.formulaMl || 0), 0),
+      // minutes after the previous noon, so a post-midnight bedtime still sorts late
+      bedMin: nw.startMin - 720 + segs[0].a,
+    });
+  }
+
+  const verdicts = {};
+  for (const v of EXPLORE_VARS) {
+    const pairs = nights.filter((nt) => nt[v.key] != null)
+      .map((nt) => [nt[v.key], nt.y]);
+    verdicts[v.key] = exploreVerdict(v, pairs);
+  }
+  const any = nights.length >= 4; // fewer dots than this reads as noise
+  return {
+    any,
+    // families who track sleep get told WHY the card is empty instead of a
+    // silent no-show; families with sleep disabled aren't nagged
+    note: !any && enabledTypes(settings).has('sleep')
+      ? `The explorer needs at least 4 nights with sleep logged in the picked
+         range (${nights.length} so far). Widen the dates, or log the night
+         sleeps — from bedtime to morning — to fill it in.`
+        .replace(/\s+/g, ' ')
+      : null,
+    nights,
+    vars: EXPLORE_VARS.map(({ key, label, kind }) => ({ key, label, kind })),
+    verdicts,
+  };
+}
+
 /** One day's entries (the /api/days/:date endpoint). */
 export function buildDay(events, date, nowWall) {
   const start = date;

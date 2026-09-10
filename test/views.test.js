@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildHome, buildStats, buildDay, buildRhythm } from '../server/views.js';
+import { buildHome, buildStats, buildDay, buildRhythm, buildExplore } from '../server/views.js';
 import { isoToWallMs } from '../server/time.js';
 
 const NOW = isoToWallMs('2026-08-29T14:00');
@@ -438,5 +438,61 @@ describe('buildRhythm', () => {
     // the only daytime gap between sleeps is 10:00 → 12:00
     expect(tile('Typical wake window').value).toBe('2h');
     expect(tile('Typical wake window').delta).toBe('≈ same as last week');
+  });
+});
+
+describe('buildExplore', () => {
+  const two = (n) => String(n).padStart(2, '0');
+  const FROM = isoToWallMs('2026-08-16');
+  const TO = isoToWallMs('2026-08-29');
+
+  it('stays quiet below four nights', () => {
+    const r = buildExplore(newestFirst([
+      ev('sleep', '2026-08-28T20:00', { durationMin: 600, side: 'night' }),
+    ]), SETTINGS, NOW, FROM, TO);
+    expect(r.any).toBe(false);
+  });
+
+  it('builds one point per night with the previous day’s facts', () => {
+    // 12 days: the later the last nap ends, the shorter that night — a
+    // planted strong negative correlation
+    const evs = [];
+    for (let day = 16; day <= 27; day++) {
+      const i = day - 16;
+      const napEndH = 14 + i * 0.5;                       // 14:00 → 19:30… capped by window
+      evs.push(ev('sleep', `2026-08-${two(day)}T${two(Math.floor(napEndH - 1))}:00`,
+        { durationMin: 60 }));                            // 1h nap ending at napEndH-ish
+      evs.push(ev('sleep', `2026-08-${two(day)}T20:00`,
+        { durationMin: 600 - i * 25, side: 'night' }));   // night shrinks as naps go later
+      evs.push(ev('feed', `2026-08-${two(day)}T10:00`, { durationMin: 10 }));
+    }
+    const r = buildExplore(newestFirst(evs), SETTINGS, NOW, FROM, TO);
+    expect(r.any).toBe(true);
+
+    // night ending morning of the 17th: led into by the 16th (nap 13:00–14:00)
+    const first = r.nights[0];
+    expect(first.date).toBe('2026-08-17');
+    expect(first.y).toBe(600);            // 20:00 → 06:00 unbroken
+    expect(first.lastNap).toBe(14 * 60);  // minutes-of-day
+    expect(first.napMin).toBe(60);
+    expect(first.milkMl).toBe(60);        // one breastfeed at the assumed 60ml
+    expect(first.bedMin).toBe(8 * 60);    // 20:00 = 8h after noon
+
+    // the planted pattern reads out in words, direction included
+    expect(r.verdicts.lastNap).toBe(
+      'A clear lean: earlier last naps went with longer nights here.');
+  });
+});
+
+describe('buildExplore empty state', () => {
+  it('explains itself to sleep-tracking families instead of vanishing', () => {
+    const r = buildExplore([], SETTINGS, NOW,
+      isoToWallMs('2026-08-23'), isoToWallMs('2026-08-29'));
+    expect(r.any).toBe(false);
+    expect(r.note).toContain('at least 4 nights');
+    // sleep disabled → no nagging
+    const off = buildExplore([], { ...SETTINGS, enabled_types: 'feed,wet' }, NOW,
+      isoToWallMs('2026-08-23'), isoToWallMs('2026-08-29'));
+    expect(off.note).toBe(null);
   });
 });

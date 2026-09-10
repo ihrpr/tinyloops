@@ -25,6 +25,9 @@ test('demo stats view renders charts with actual bars', async ({ page }) => {
   await expect(page.locator('.recharts-bar-rectangle').first()).toBeAttached();
   // the rhythm section: stacked week bands (today's loop lives on the log view)
   await expect(page.locator('.rhythm-week')).toBeVisible();
+  // the night-stretch scatter with its worded verdict
+  await expect(page.getByRole('heading', { name: 'Night stretch vs the day before' })).toBeVisible();
+  await expect(page.locator('.recharts-scatter-symbol').first()).toBeAttached();
 });
 
 test('demo growth view renders WHO curves, points and the table', async ({ page }) => {

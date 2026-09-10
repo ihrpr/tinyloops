@@ -4,6 +4,7 @@ import { Chrome } from '../components/Chrome.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { ReauthBanner } from '../components/ReauthBanner.jsx';
 import { Rhythm } from '../components/charts/Rhythm.jsx';
+import { NightScatter } from '../components/charts/NightScatter.jsx';
 import { MilkChart } from '../components/charts/MilkChart.jsx';
 import { PumpChart } from '../components/charts/PumpChart.jsx';
 
@@ -43,6 +44,7 @@ export function Stats() {
         </div>
 
         {data && <Rhythm rhythm={data.rhythm} />}
+        {data && <NightScatter explore={data.explore} />}
 
         <div className="card">
           <h3>Milk per day (ml)</h3>
