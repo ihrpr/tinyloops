@@ -91,6 +91,7 @@ body {
 .icn.t-nappies { background: rgba(63, 163, 208, .15);  color: #2f88b3; }
 .icn.t-dirty   { background: rgba(138, 106, 82, .16);  color: #7a5c44; }
 .icn.t-baby    { background: rgba(207, 131, 64, .16);  color: #b06f31; }
+.icn.t-mood    { background: rgba(184, 134, 63, .16);  color: #a06e2c; }
 .icn.t-solid   { background: rgba(154, 132, 62, .16);  color: #85712c; }
 .icn.t-timer   { background: rgba(63, 122, 78, .14);   color: #3f7a4e; }
 .icn.t-chart   { background: rgba(79, 136, 184, .14);  color: #40749e; }

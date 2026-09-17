@@ -98,6 +98,14 @@ function generateDemo(nowWall) {
     const startWall = today - day * MS_PER_DAY - 3.2 * 3600000 + (day % 3) * 720000;
     add('sleep', (nowWall - startWall) / 3600000,
       { durationMin: 560 + (day % 4) * 15, side: 'night' });
+    // an end-of-day mood for every finished day (today's isn't in yet)
+    if (day > 0) {
+      const moodWall = today - (day - 1) * MS_PER_DAY - 3 * 3600000; // ~21:00
+      add('mood', (nowWall - moodWall) / 3600000, {
+        side: ['good', 'good', 'mixed', 'good', 'bad'][day % 5],
+        notes: day % 5 === 4 ? 'teething, grumpy afternoon' : '',
+      });
+    }
   }
   out.sort((a, b) => b.startWall - a.startWall);
   return out;

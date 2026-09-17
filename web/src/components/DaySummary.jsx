@@ -23,7 +23,7 @@ export function DaySummary({ summary, onEditNursing }) {
           <div className="day-nav">
             <button aria-label="Previous day" disabled={idx === 0}
               onClick={() => setIdx(idx - 1)}>‹</button>
-            <span className="day-name">{day.name}</span>
+            <span className="day-name">{day.name}{day.mood ? ` ${day.mood}` : ''}</span>
             <button aria-label="Next day" disabled={idx === days.length - 1}
               onClick={() => setIdx(idx + 1)}>›</button>
           </div>

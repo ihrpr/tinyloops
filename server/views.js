@@ -20,6 +20,14 @@ export const TYPES = {
   pump:   { label: 'Pump',              short: 'Pump',    emoji: '🥛', timed: false },
   wet:    { label: 'Wet nappy',         short: 'Wet',     emoji: '💧', timed: false },
   dirty:  { label: 'Dirty nappy',       short: 'Dirty',   emoji: '💩', timed: false },
+  mood:   { label: 'Day mood',          short: 'Mood',    emoji: '😊', timed: false },
+};
+
+// how the day went, entered once towards bedtime; side carries the verdict
+export const MOODS = {
+  good:  { emoji: '😊', word: 'a good day' },
+  mixed: { emoji: '😐', word: 'a mixed day' },
+  bad:   { emoji: '😞', word: 'a hard day' },
 };
 const ALL_TYPES = Object.keys(TYPES);
 
@@ -142,6 +150,8 @@ function eventDetails(e) {
   } else if (e.type === 'sleep') {
     // naps are the unmarked default — only 'night' is worth a word
     if (e.side === 'night') parts.push('night');
+  } else if (e.type === 'mood') {
+    if (MOODS[e.side]) parts.push(`${MOODS[e.side].emoji} ${MOODS[e.side].word}`);
   } else if (e.side) parts.push(sideName(e.side));
   if (e.type === 'bottle') {
     if (e.amountMl) parts.push(`${e.amountMl}ml milk`);
@@ -355,7 +365,23 @@ function summaryRows(events, s, en, assumedMl, nowWall, isToday) {
       [(wet || dirty) ? `${wet} wet · ${dirty} dirty` : '']);
   }
 
+  // how the day went — newest mood entry of the day wins (events are
+  // newest-first), so a corrected verdict overrides the earlier one
+  const mood = of('mood').find((e) => MOODS[e.side]);
+  if (mood) {
+    pushRow('mood', '😊', 'Day mood', '',
+      [`${MOODS[mood.side].emoji} ${MOODS[mood.side].word}`, mood.notes || '']);
+  }
+
   return rows;
+}
+
+/** The newest mood verdict logged for the day starting at `s`, as its
+ *  emoji — what the band rows show at their right edge. */
+function dayMood(events, s) {
+  const e = events.find((x) => x.type === 'mood' && MOODS[x.side] &&
+    x.startWall != null && x.startWall >= s && x.startWall < s + MS_PER_DAY);
+  return e ? MOODS[e.side].emoji : null;
 }
 
 function buildSummary(events, settings, nowWall) {
@@ -386,6 +412,7 @@ function buildSummary(events, settings, nowWall) {
       date: wallMsToDate(s),
       name: fmtDay(s, nowWall),
       today: i === 0,
+      mood: dayMood(events, s),
       ...(i > 0 && { rows: summaryRows(events, s, en, assumedMl, nowWall, false) }),
     });
   }
@@ -607,6 +634,7 @@ export function buildRhythm(events, settings, nowWall, fromWall, toWall) {
       spans: sleepSegments(events, s, s + MS_PER_DAY, nowWall),
       feeds: feedMinutes(events, s, s + MS_PER_DAY),
       today: s === today,
+      mood: dayMood(events, s),
     });
   }
   // hide the bands when the picked range holds nothing to draw

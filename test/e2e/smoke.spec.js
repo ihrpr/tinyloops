@@ -11,7 +11,8 @@ test('demo log view renders the tracker', async ({ page }) => {
   // the 24h day strip inside the summary widget, pageable to previous days
   await expect(page.locator('#summary .day-band')).toBeVisible();
   await page.getByRole('button', { name: 'Previous day' }).click();
-  await expect(page.locator('#summary .day-name')).toHaveText('Yesterday');
+  // the name may carry a day-mood emoji ("Yesterday 😊")
+  await expect(page.locator('#summary .day-name')).toContainText('Yesterday');
   await expect(page.locator('#summary .day-band')).toBeVisible();
 });
 

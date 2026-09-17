@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, localNowIso } from '../api.js';
-import { SideSeg, EatenSeg, SleepSeg } from './SideSeg.jsx';
+import { SideSeg, EatenSeg, SleepSeg, MoodSeg } from './SideSeg.jsx';
 import { IconChip } from './icons.jsx';
 
 const numOrNull = (v) => (v.trim() === '' ? null : Number(v));
@@ -19,6 +19,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
   const [eaten, setEaten] = useState('');
   const [sleepKind, setSleepKind] = useState(''); // '' = nap
   const [sleepKindTouched, setSleepKindTouched] = useState(false);
+  const [mood, setMood] = useState('');
   const [foods, setFoods] = useState(() => new Set());
   const [allFoods, setAllFoods] = useState(false);
   const [bottleBm, setBottleBm] = useState('');
@@ -68,7 +69,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
 
   function reset() {
     setSide(''); setSideTouched(false); setEaten('');
-    setSleepKind(''); setSleepKindTouched(false);
+    setSleepKind(''); setSleepKindTouched(false); setMood('');
     setFoods(new Set()); setAllFoods(false);
     setBottleBm(''); setBottleF(''); setAmount(''); setNotes('');
     setEarlier(false); setStartInput(''); setDurInput('');
@@ -78,6 +79,10 @@ export function QuickLog({ home, run, onError, onLogged }) {
     const p = { type, notes: notes.trim() };
     if (type === 'feed') p.side = side;
     if (type === 'sleep') p.side = sleepKind;
+    if (type === 'mood') {
+      if (!mood) return onError('How was the day — good, mixed or hard?');
+      p.side = mood;
+    }
     if (type === 'solid') {
       p.side = eaten;
       // chips + anything typed → the same comma-separated food string
@@ -148,6 +153,13 @@ export function QuickLog({ home, run, onError, onLogged }) {
         </>
       )}
 
+      {type === 'mood' && (
+        <>
+          <div className="side-hint">How was the baby’s day?</div>
+          <MoodSeg value={mood} onChange={setMood} />
+        </>
+      )}
+
       {type === 'bottle' && (
         <div>
           <label className="f">Breast milk (ml)
@@ -211,8 +223,8 @@ export function QuickLog({ home, run, onError, onLogged }) {
       )}
 
       <input type="text" value={notes}
-        placeholder={type === 'solid'
-          ? 'Something else? e.g. mango' : 'Notes (optional)'}
+        placeholder={type === 'solid' ? 'Something else? e.g. mango'
+          : type === 'mood' ? 'What made it so? (optional)' : 'Notes (optional)'}
         onChange={(e) => setNotes(e.target.value)} />
       <button id="goBtn" className="primary" disabled={busy} onClick={submit}>
         {busy ? 'Saving…' : goLabel}

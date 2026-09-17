@@ -496,3 +496,36 @@ describe('buildExplore empty state', () => {
     expect(off.note).toBe(null);
   });
 });
+
+describe('day mood', () => {
+  it('validates its own vocabulary', async () => {
+    const { eventParams } = await import('../server/validate.js');
+    expect(eventParams({ type: 'mood', start: '2026-08-29T21:00', side: 'good' }).side).toBe('good');
+    expect(eventParams({ type: 'mood', start: '2026-08-29T21:00', side: 'L' }).side).toBe('');
+  });
+
+  it('shows in the summary rows and marks band days with its emoji', () => {
+    const { summary } = buildHome(newestFirst([
+      ev('mood', '2026-08-29T13:50', { side: 'mixed', notes: 'teething' }),
+      ev('mood', '2026-08-29T13:00', { side: 'good' }), // corrected → newest wins
+      ev('mood', '2026-08-28T21:00', { side: 'bad' }),
+      ev('sleep', '2026-08-29T10:00', { durationMin: 60 }),
+    ]), SETTINGS, NOW);
+    const row = summary.rows.find((r) => r.label === 'Day mood');
+    expect(row.value).toBe('😐 a mixed day · teething');
+    expect(summary.days[6].mood).toBe('😐');   // today
+    expect(summary.days[5].mood).toBe('😞');   // yesterday
+    expect(summary.days[4].mood).toBe(null);
+    // paging back shows the same row layout, mood included
+    expect(summary.days[5].rows.find((r) => r.label === 'Day mood').value)
+      .toBe('😞 a hard day');
+  });
+
+  it('rides on the rhythm days for the stats bands', () => {
+    const r = buildRhythm(newestFirst([
+      ev('sleep', '2026-08-28T20:00', { durationMin: 600, side: 'night' }),
+      ev('mood', '2026-08-28T21:00', { side: 'good' }),
+    ]), SETTINGS, NOW, isoToWallMs('2026-08-23'), isoToWallMs('2026-08-29'));
+    expect(r.days.find((d) => d.date === '2026-08-28').mood).toBe('😊');
+  });
+});

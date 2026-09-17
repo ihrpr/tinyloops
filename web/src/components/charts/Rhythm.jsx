@@ -92,7 +92,10 @@ function WeekBands({ days, nowMin, labelStep = 1 }) {
   const rowH = nDays <= 7 ? 15 : nDays <= 21 ? 11 : 8;
   const gap = nDays <= 7 ? 12 : nDays <= 21 ? 6 : 3;
   const dotR = nDays <= 7 ? 3.4 : nDays <= 21 ? 2.7 : 2.1;
-  const W = 380, x0 = 44, x1 = W - 8;
+  // day-mood emoji sit to the right of the rows; reserve the gutter only
+  // when at least one day has a verdict
+  const anyMood = days.some((day) => day.mood);
+  const W = 380, x0 = 44, x1 = W - (anyMood ? 26 : 8);
   const H = 20 + nDays * (rowH + gap);
   const X = (min) => x0 + (min / MIN_DAY) * (x1 - x0);
   return (
@@ -133,6 +136,10 @@ function WeekBands({ days, nowMin, labelStep = 1 }) {
             {day.today && (
               <line x1={X(nowMin)} y1={y - 3} x2={X(nowMin)} y2={y + rowH + 3}
                 stroke="var(--warm)" strokeWidth="2" strokeLinecap="round" />
+            )}
+            {day.mood && (
+              <text x={x1 + 6} y={y + rowH / 2 + Math.min(rowH, 12) / 2.4}
+                fontSize={Math.min(rowH + 2, 13)}>{day.mood}</text>
             )}
           </g>
         );

@@ -100,7 +100,8 @@ export function eventParams(body) {
   // own vocabulary. A sleep without 'night' is a nap and stores '' so the
   // default costs nothing in the sheet.
   const sides = type === 'solid' ? ['taste', 'some', 'lots']
-    : type === 'sleep' ? ['night'] : ['L', 'R', 'both'];
+    : type === 'sleep' ? ['night']
+    : type === 'mood' ? ['good', 'mixed', 'bad'] : ['L', 'R', 'both'];
   const p = {
     type, startWall,
     side: sides.includes(body.side) ? body.side : '',

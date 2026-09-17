@@ -34,3 +34,11 @@ const SLEEP_KIND = [['', 'Nap'], ['night', 'Night']];
 export function SleepSeg({ value, onChange }) {
   return <Seg options={SLEEP_KIND} value={value} onChange={onChange} />;
 }
+
+// How the day went, entered towards bedtime. Same column again — the server
+// accepts good/mixed/bad only for mood entries.
+const MOOD_OPTS = [['good', '😊 Good'], ['mixed', '😐 Mixed'], ['bad', '😞 Hard']];
+
+export function MoodSeg({ value, onChange }) {
+  return <Seg options={MOOD_OPTS} value={value} onChange={onChange} />;
+}
