@@ -10,12 +10,16 @@
  */
 
 import { Hono } from 'hono';
-import { login, callback, logout, requireSession, accessToken, NeedsSignIn } from './auth.js';
+import {
+  login, callback, logout, requireSession, sessionUser, createSession,
+  accessToken, NeedsSignIn, randomToken, sha256Hex,
+} from './auth.js';
 import * as sheets from './sheets.js';
+import * as passkeys from './passkeys.js';
 import { buildHome, buildStats, buildDay, buildRhythm, buildExplore, TYPES, MAX_STATS_DAYS } from './views.js';
 import { buildGrowth } from './growth.js';
 import { isoToWallMs, dayStart, MS_PER_DAY } from './time.js';
-import { eventParams, shareEmail, growthParams, profileParams } from './validate.js';
+import { eventParams, shareEmail, caregiverName, growthParams, profileParams } from './validate.js';
 import { UserFacingError } from './errors.js';
 import { demoEvents, demoGrowth, DEMO_SETTINGS } from './demo.js';
 
@@ -112,8 +116,11 @@ async function loadState(c) {
 async function freshHome(c) {
   const state = await loadState(c);
   const home = buildHome(state.events, state.settings, nowWall(c));
-  home.email = c.get('user').email;
-  home.sheetUrl = sheets.sheetUrl(c.get('user').sheet_id);
+  const user = c.get('user');
+  home.email = user.email;
+  home.guest = user.kind === 'guest';
+  // guests have no Google account that could open the raw sheet
+  home.sheetUrl = home.guest ? null : sheets.sheetUrl(user.sheet_id);
   return home;
 }
 
@@ -124,6 +131,127 @@ const noSheet = (c) => c.json({ error: 'No tracker sheet connected yet.', code: 
 app.get('/auth/login', login);
 app.get('/auth/callback', callback);
 app.post('/auth/logout', logout);
+
+// Passkey sign-in (no session — it CREATES the session). Registration lives
+// under /api/* so the session middleware guards it.
+app.post('/auth/passkey/options', passkeys.signInOptions);
+app.post('/auth/passkey', passkeys.signIn);
+
+// ---------- caregiver join ----------
+
+// Registered BEFORE the session middleware: a brand-new caregiver arrives
+// with no session — and needs no Google account at all. A signed-in Google
+// user hitting the same link attaches their existing account instead (the
+// session is looked up optionally). Sheet access works either way because
+// the accepted-invite row written here makes requireSheet proxy the
+// caregiver's sheet I/O through the link owner's Google credentials.
+
+const JOIN_TTL_MS = 2 * MS_PER_DAY;
+const JOIN_CODE_RE = /^[a-f0-9]{64}$/;
+
+/** The live (unused, unexpired) join link for the :code param, or null. */
+async function liveJoinLink(c) {
+  const code = c.req.param('code');
+  if (!JOIN_CODE_RE.test(code)) return null;
+  return c.env.DB.prepare(
+    `SELECT l.*, u.email AS owner_email FROM join_links l
+     JOIN users u ON u.id = l.owner_id
+     WHERE l.id = ? AND l.used_at IS NULL AND l.expires_at > ?`)
+    .bind(await sha256Hex(code), Date.now()).first();
+}
+
+const deadLink = (c) => c.json(
+  { error: 'This invitation link is no longer valid — ask for a fresh one.' }, 404);
+
+app.get('/api/join/:code', async (c) => {
+  const link = await liveJoinLink(c);
+  if (!link) return deadLink(c);
+  const user = await sessionUser(c);
+  return c.json({
+    from: link.owner_email,
+    relink: Boolean(link.guest_id),
+    signedIn: user ? {
+      email: user.email, name: user.name,
+      hasSheet: Boolean(user.sheet_id), guest: user.kind === 'guest',
+    } : null,
+  });
+});
+
+app.post('/api/join/:code', async (c) => {
+  const link = await liveJoinLink(c);
+  if (!link) return deadLink(c);
+  const user = await sessionUser(c);
+
+  // Reject wrong-state visitors BEFORE burning the single-use link, so the
+  // intended caregiver can still join with it afterwards.
+  if (link.guest_id && user) {
+    throw new UserFacingError('This link signs an existing caregiver back in — ' +
+      'open it on their device instead.');
+  }
+  if (user) {
+    if (user.kind === 'guest') {
+      throw new UserFacingError('This device is already connected as a caregiver — ' +
+        'sign out first to join as someone else.');
+    }
+    if (user.sheet_id === link.sheet_id) {
+      throw new UserFacingError('You already have access to this tracker.');
+    }
+    if (user.sheet_id) {
+      throw new UserFacingError('This account is already connected to a tracker sheet — ' +
+        'disconnect it first (Switch sheet) to join a shared one.');
+    }
+  }
+  const name = !user && !link.guest_id
+    ? caregiverName((await c.req.json().catch(() => ({}))).name) : null;
+
+  // Single-use: claim atomically so a re-posted code can't join twice.
+  const now = Date.now();
+  const claimed = await c.env.DB.prepare(
+    'UPDATE join_links SET used_at = ? WHERE id = ? AND used_at IS NULL')
+    .bind(now, link.id).run();
+  if (!claimed.meta.changes) return deadLink(c);
+
+  if (link.guest_id) {
+    // sign the existing guest caregiver back in on this device
+    await createSession(c, link.guest_id);
+    return c.json({ ok: true });
+  }
+
+  // One batch, all-or-nothing: a user row with sheet_id but no accepted
+  // invite would be a member requireSheet can't proxy and the owner can't
+  // even see to revoke.
+  const userId = user ? user.id : 'guest:' + crypto.randomUUID();
+  await c.env.DB.batch([
+    user
+      ? c.env.DB.prepare('UPDATE users SET sheet_id = ? WHERE id = ?')
+        .bind(link.sheet_id, userId)
+      : c.env.DB.prepare(
+        `INSERT INTO users (id, email, name, kind, sheet_id, created_at)
+         VALUES (?, '', ?, 'guest', ?, ?)`)
+        .bind(userId, name, link.sheet_id, now),
+    // the standing membership record requireSheet resolves to the owner's token
+    c.env.DB.prepare(
+      `INSERT INTO invites (id, inviter_id, email, sheet_id, created_at,
+       accepted_by, accepted_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), link.owner_id, user ? user.email.toLowerCase() : '',
+        link.sheet_id, now, userId, now),
+  ]);
+
+  if (user) {
+    // Best-effort: also share the raw sheet file with their Google account,
+    // as the email invite does. Failure never blocks joining — in-app access
+    // works through the token proxy regardless.
+    try {
+      const owner = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?')
+        .bind(link.owner_id).first();
+      c.set('tokenUser', owner);
+      await sheets.shareSheet(c, link.sheet_id, user.email);
+    } catch { /* in-app access unaffected */ }
+  } else {
+    await createSession(c, userId);
+  }
+  return c.json({ ok: true });
+});
 
 // ---------- demo (read-only, no session) ----------
 
@@ -196,6 +324,27 @@ app.use('/api/settings', requireSheet);
 app.use('/api/share', requireSheet);
 app.use('/api/growth', requireSheet);
 app.use('/api/growth/*', requireSheet);
+app.use('/api/caregivers', requireSheet);
+app.use('/api/caregivers/*', requireSheet);
+
+// Guests (link-joined caregivers with no Google account) can log and edit,
+// but never manage sheet connections, credentials or who has access.
+const notGuest = async (c, next) => {
+  if (c.get('user').kind === 'guest') {
+    return c.json({ error: 'Only the account that owns the tracker can do this.' }, 403);
+  }
+  return next();
+};
+app.use('/api/share', notGuest);
+app.use('/api/sheet', notGuest);
+app.use('/api/picker-config', notGuest);
+app.use('/api/caregivers', notGuest);
+app.use('/api/caregivers/*', notGuest);
+
+// ---------- passkey registration (any signed-in user, guests included) ----------
+
+app.post('/api/passkey/options', passkeys.registerOptions);
+app.post('/api/passkey/register', passkeys.register);
 
 // ---------- session info ----------
 
@@ -216,10 +365,14 @@ app.get('/api/me', async (c) => {
   // surface a waiting invite only while there's no sheet yet — that's the
   // moment the Connect screen can offer one-tap accept
   const invite = user.sheet_id ? null : await pendingInvite(c, user.email);
+  const guest = user.kind === 'guest';
   return c.json({
     email: user.email,
+    name: user.name || null,
+    guest,
     hasSheet: Boolean(user.sheet_id),
-    sheetUrl: user.sheet_id ? sheets.sheetUrl(user.sheet_id) : null,
+    // guests have no Google account that could open the raw sheet
+    sheetUrl: user.sheet_id && !guest ? sheets.sheetUrl(user.sheet_id) : null,
     invite: invite ? { from: invite.inviter_email } : null,
   });
 });
@@ -265,7 +418,7 @@ app.get('/api/growth', async (c) => c.json(await freshGrowth(c)));
 app.post('/api/growth', async (c) => {
   const user = c.get('user');
   const p = growthParams(await c.req.json(), requireNow(c));
-  const id = await sheets.addMeasurement(c, user.sheet_id, p, user.email);
+  const id = await sheets.addMeasurement(c, user.sheet_id, p, user.name || user.email);
   return c.json({ id, growth: await freshGrowth(c) });
 });
 
@@ -290,7 +443,7 @@ app.put('/api/growth/profile', async (c) => {
 app.post('/api/events', async (c) => {
   const user = c.get('user');
   const p = eventParams(await c.req.json());
-  const id = await sheets.addEvent(c, user.sheet_id, p, user.email);
+  const id = await sheets.addEvent(c, user.sheet_id, p, user.name || user.email);
   return c.json({ id, home: await freshHome(c) });
 });
 
@@ -374,6 +527,108 @@ app.post('/api/share', async (c) => {
      VALUES (?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), user.id, email.toLowerCase(), user.sheet_id, now).run();
   return c.json({ ok: true, driveShared });
+});
+
+// ---------- caregiver management (behind requireSheet + notGuest) ----------
+
+const JOIN_LINK_CAP = 10;
+
+app.post('/api/caregivers/link', async (c) => {
+  // The link binds the joiner to the CREDENTIAL HOLDER — the sheet owner
+  // even when an invited partner minted it — so the caregiver's sheet I/O
+  // always proxies through a Google token that can open the sheet.
+  const owner = c.get('tokenUser') || c.get('user');
+  const sheetId = c.get('user').sheet_id;
+  const now = Date.now();
+  // opportunistic GC of dead links, mirroring the sessions sweep
+  await c.env.DB.prepare('DELETE FROM join_links WHERE expires_at < ?').bind(now).run();
+  const open = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM join_links
+     WHERE owner_id = ? AND used_at IS NULL AND expires_at > ?`)
+    .bind(owner.id, now).first();
+  if (open.n >= JOIN_LINK_CAP) {
+    throw new UserFacingError('Too many unused invite links — wait for one to be used or expire.');
+  }
+  const body = await c.req.json().catch(() => ({}));
+  let guestId = null;
+  if (body.guestId != null) {
+    // re-link: this link signs an existing guest caregiver back in (new
+    // phone, lost session) instead of creating another account
+    const guest = await c.env.DB.prepare(
+      `SELECT u.id FROM invites i JOIN users u ON u.id = i.accepted_by
+       WHERE i.sheet_id = ? AND i.accepted_by = ? AND u.kind = 'guest' LIMIT 1`)
+      .bind(sheetId, String(body.guestId)).first();
+    if (!guest) throw new UserFacingError('That caregiver is not connected to this tracker.');
+    guestId = guest.id;
+  }
+  const code = randomToken();
+  await c.env.DB.prepare(
+    `INSERT INTO join_links (id, owner_id, sheet_id, guest_id, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(await sha256Hex(code), owner.id, sheetId, guestId, now, now + JOIN_TTL_MS).run();
+  return c.json({ url: `${new URL(c.req.url).origin}/join/${code}` });
+});
+
+app.get('/api/caregivers', async (c) => {
+  const user = c.get('user');
+  const rows = (await c.env.DB.prepare(
+    `SELECT u.id, u.kind, u.name, u.email, MAX(i.accepted_at) AS accepted_at,
+            (SELECT MAX(s.last_seen) FROM sessions s WHERE s.user_id = u.id) AS last_seen
+     FROM invites i JOIN users u ON u.id = i.accepted_by AND u.sheet_id = i.sheet_id
+     WHERE i.sheet_id = ?
+     GROUP BY u.id ORDER BY accepted_at`)
+    .bind(user.sheet_id).all()).results;
+  const now = Date.now();
+  const seen = (ms) => {
+    if (ms == null) return 'never signed in';
+    const d = Math.floor((now - ms) / MS_PER_DAY);
+    return d === 0 ? 'active today' : d === 1 ? 'active yesterday' : `active ${d} days ago`;
+  };
+  // the sheet owner has no invite row — list them first so "Who has access"
+  // is complete for an invited partner looking at it
+  const owner = c.get('tokenUser') || user;
+  return c.json({
+    caregivers: [{
+      id: owner.id,
+      label: owner.name || owner.email,
+      sub: 'sheet owner',
+      guest: false,
+      owner: true,
+      self: owner.id === user.id,
+    }, ...rows.map((r) => ({
+      id: r.id,
+      label: r.name || r.email,
+      sub: (r.kind === 'guest' ? 'no Google account · ' : '') + seen(r.last_seen),
+      guest: r.kind === 'guest',
+      self: r.id === user.id,
+    }))],
+  });
+});
+
+app.delete('/api/caregivers/:id', async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  if (id === user.id) throw new UserFacingError("You can't remove yourself.");
+  const member = await c.env.DB.prepare(
+    `SELECT u.* FROM invites i JOIN users u ON u.id = i.accepted_by
+     WHERE i.sheet_id = ? AND i.accepted_by = ? LIMIT 1`)
+    .bind(user.sheet_id, id).first();
+  if (!member) throw new UserFacingError('That person is not connected to this tracker.');
+  // revoke access immediately: no sessions, no membership record
+  await c.env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id).run();
+  await c.env.DB.prepare('DELETE FROM invites WHERE sheet_id = ? AND accepted_by = ?')
+    .bind(user.sheet_id, id).run();
+  if (member.kind === 'guest') {
+    // guests exist only as members of this sheet — remove the account and
+    // every way back in (sign-back-in links, passkeys)
+    await c.env.DB.prepare('DELETE FROM join_links WHERE guest_id = ?').bind(id).run();
+    await c.env.DB.prepare('DELETE FROM passkeys WHERE user_id = ?').bind(id).run();
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+  } else {
+    await c.env.DB.prepare('UPDATE users SET sheet_id = NULL WHERE id = ? AND sheet_id = ?')
+      .bind(id, user.sheet_id).run();
+  }
+  return c.json({ ok: true });
 });
 
 app.post('/api/invite/accept', async (c) => {

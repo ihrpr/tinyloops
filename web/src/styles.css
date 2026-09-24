@@ -727,5 +727,31 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 #shareModal .hint { font-size: 13px; }
 #shareModal b { color: var(--ink); font-weight: 650; }
 #shareModal .status { margin: 10px 0 0; text-align: left; }
-.share-steps { margin: 12px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--muted); }
-.share-steps li { margin-top: 8px; }
+/* ---------- caregiver sharing (ShareModal) + join page ---------- */
+
+.join-link {
+  margin: 8px 0 10px; padding: 10px 12px; border-radius: 10px;
+  background: var(--chip); font-size: 13px; word-break: break-all;
+  font-variant-ligatures: none; color: var(--ink);
+}
+.cg-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.cg-row:last-of-type { border-bottom: none; }
+.cg-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cg-who b { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cg-who .muted { font-size: 12.5px; }
+.cg-row .linkish { padding: 6px 4px; font-size: 13px; white-space: nowrap; }
+/* always tinted, not just on hover — touch devices never hover */
+.linkish.danger { color: var(--danger); opacity: .85; }
+.linkish.danger:hover { color: var(--danger); opacity: 1; }
+.email-invite { margin-top: 16px; }
+.email-invite summary { font-size: 13.5px; color: var(--muted); cursor: pointer; }
+.email-invite summary:hover { color: var(--ink); }
+.email-invite .secondary { margin-top: 10px; }
+
+.hero .passkey-btn { display: block; margin: 2px auto 0; font-size: 14px; }
+
+#view-join { max-width: 440px; }
+#view-join .invite-card { margin-top: 6px; }
+#view-join .primary, #view-join .secondary { width: 100%; margin-top: 12px; }
+#view-join .or-divider { text-align: center; margin: 12px 0 0; font-size: 13px; }
+#view-join a { color: var(--accent-strong); }

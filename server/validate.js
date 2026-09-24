@@ -43,6 +43,14 @@ export function shareEmail(v) {
   return email;
 }
 
+/** Validate a caregiver's display name (goes into the sheet's "added by"
+ *  column, so it passes through safeText like any other written text). */
+export function caregiverName(v) {
+  const name = safeText(String(v ?? '').trim().replace(/\s+/g, ' '), 40);
+  if (!name) throw new ValidationError('Please enter your name.');
+  return name;
+}
+
 // Growth bounds: generous enough for any real 0–2y measurement (and premies),
 // tight enough that a value in the wrong unit (grams, metres) is caught.
 export const WEIGHT_KG = { min: 0.2, max: 40 };

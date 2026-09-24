@@ -69,8 +69,14 @@ export function Tracker() {
 
       <div className="footer-actions">
         <button className="linkish" onClick={load}>Refresh</button>
-        <button className="linkish" onClick={() => setShareOpen(true)}>Invite partner</button>
-        <button className="linkish" onClick={switchSheet}>Switch sheet</button>
+        {/* guests joined someone else's sheet: sharing and sheet management
+            belong to the Google-signed-in family members */}
+        {!home.guest && (
+          <>
+            <button className="linkish" onClick={() => setShareOpen(true)}>Invite caregiver</button>
+            <button className="linkish" onClick={switchSheet}>Switch sheet</button>
+          </>
+        )}
         <button className="linkish" onClick={signOut}>Sign out</button>
       </div>
       <p className="legal-links">

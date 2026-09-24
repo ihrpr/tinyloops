@@ -98,11 +98,12 @@ export function Connect() {
       </div>
       <div className="card">
         <h2>Tracking together?</h2>
-        <p className="muted">One of you creates the sheet, then invites the other
-          with “Invite partner” inside the tracker — the invitation appears right
-          here, on this screen, once they sign in with the invited email.
+        <p className="muted">One of you creates the sheet, then shares it with
+          “Invite caregiver” inside the tracker — usually as a link you can open
+          straight away. Invited by Google email instead? The invitation appears
+          right here once you sign in with the invited address.
           {session?.invite ? '' : ' Expecting one but not seeing it? Check you’re ' +
-          'signed in with the address your partner invited.'}</p>
+          'signed in with the email that was invited.'}</p>
       </div>
       {status && <p className={'status' + (error ? ' error' : '')}>{status}</p>}
       <div className="footer-actions">

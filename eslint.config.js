@@ -8,6 +8,7 @@ const browserGlobals = {
   history: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
   setInterval: 'readonly', clearInterval: 'readonly', confirm: 'readonly',
   URLSearchParams: 'readonly', Response: 'readonly',
+  btoa: 'readonly', atob: 'readonly', Uint8Array: 'readonly',
   google: 'readonly', gapi: 'readonly',
 };
 

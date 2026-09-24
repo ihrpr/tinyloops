@@ -24,6 +24,10 @@ const SCOPES = [
 
 const STATE_COOKIE = 'tl.state';
 const PKCE_COOKIE = 'tl.pkce';
+const NEXT_COOKIE = 'tl.next';
+// The only place sign-in may land besides '/': a caregiver join page. Never
+// an open redirect — the path is validated on write AND read.
+const NEXT_RE = /^\/join\/[a-f0-9]{64}$/;
 const SESSION_DAYS = 90;
 const SESSION_ROLL_INTERVAL_MS = MS_PER_HOUR; // don't roll the expiry more than hourly
 const STATE_MAX_AGE_S = 600;                  // OAuth state cookie lifetime
@@ -32,9 +36,9 @@ const TOKEN_EXPIRY_SKEW_S = 60;               // treat tokens as expiring this e
 // ---------- small crypto helpers (WebCrypto, no dependencies) ----------
 
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-const b64dec = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+export const b64dec = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-function randomToken() {
+export function randomToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -51,7 +55,7 @@ function decodeJwtPayload(jwt) {
   }
 }
 
-async function sha256Hex(s) {
+export async function sha256Hex(s) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -105,7 +109,7 @@ function cookieSecure(c) {
 }
 
 /** Shared cookie options so the security flags can't drift between cookies. */
-const cookieOpts = (c, extra) => ({
+export const cookieOpts = (c, extra) => ({
   httpOnly: true, sameSite: 'Lax', secure: cookieSecure(c), ...extra,
 });
 
@@ -125,10 +129,15 @@ const redirectUri = (c) => {
   return url.origin + '/auth/callback';
 };
 
-/** GET /auth/login[?consent=1] — send the user to Google. */
+/** GET /auth/login[?consent=1][&next=/join/…] — send the user to Google. */
 export async function login(c) {
   const state = randomToken();
   setCookie(c, STATE_COOKIE, state, cookieOpts(c, { path: '/auth', maxAge: STATE_MAX_AGE_S }));
+  // where to land after the callback (only a join page qualifies)
+  const next = c.req.query('next');
+  if (next && NEXT_RE.test(next)) {
+    setCookie(c, NEXT_COOKIE, next, cookieOpts(c, { path: '/auth', maxAge: STATE_MAX_AGE_S }));
+  }
   // PKCE (S256): binds the callback's code to this browser, on top of the
   // client secret and the state cookie (OAuth 2.1 recommends it even for
   // confidential clients).
@@ -159,8 +168,11 @@ export async function callback(c) {
   const state = c.req.query('state');
   const cookieState = getCookie(c, STATE_COOKIE);
   const verifier = getCookie(c, PKCE_COOKIE);
+  const nextRaw = getCookie(c, NEXT_COOKIE);
   deleteCookie(c, STATE_COOKIE, { path: '/auth' });
   deleteCookie(c, PKCE_COOKIE, { path: '/auth' });
+  deleteCookie(c, NEXT_COOKIE, { path: '/auth' });
+  const next = nextRaw && NEXT_RE.test(nextRaw) ? nextRaw : '/';
   if (!state || state !== cookieState || !verifier) {
     return c.redirect('/?auth_error=state_mismatch');
   }
@@ -210,7 +222,8 @@ export async function callback(c) {
   if (!tok.refresh_token && !existing?.refresh_token_enc) {
     // Signed in before but we lost/never had the refresh token — one more
     // round trip with the consent screen forced.
-    return c.redirect('/auth/login?consent=1');
+    return c.redirect('/auth/login?consent=1' +
+      (next !== '/' ? `&next=${encodeURIComponent(next)}` : ''));
   }
 
   const accessEnc = await encrypt(c.env, tok.access_token);
@@ -230,14 +243,20 @@ export async function callback(c) {
       .run();
   }
 
+  await createSession(c, userId);
+  return c.redirect(next);
+}
+
+/** Mint a session row for userId and set the cookie on this response.
+ *  Shared by the OAuth callback and the caregiver join flow. */
+export async function createSession(c, userId) {
   const session = randomToken();
-  const expires = now + SESSION_DAYS * MS_PER_DAY;
+  const now = Date.now();
   await c.env.DB.prepare(
     `INSERT INTO sessions (id, user_id, created_at, last_seen, expires_at)
      VALUES (?, ?, ?, ?, ?)`)
-    .bind(await sha256Hex(session), userId, now, now, expires).run();
+    .bind(await sha256Hex(session), userId, now, now, now + SESSION_DAYS * MS_PER_DAY).run();
   setCookie(c, sessionCookieName(c), session, cookieOpts(c, { path: '/', maxAge: SESSION_DAYS * 86400 }));
-  return c.redirect('/');
 }
 
 /** POST /auth/logout — drop this device's session. */
@@ -251,20 +270,18 @@ export async function logout(c) {
   return c.json({ ok: true });
 }
 
-/**
- * Session middleware for /api/*: loads the user row into c.var.user or
- * responds 401. Rolls the expiry forward at most once an hour.
- */
-export async function requireSession(c, next) {
+/** The signed-in user row for this request, or null. Rolls the session
+ *  expiry forward at most once an hour. */
+export async function sessionUser(c) {
   const cookie = getCookie(c, sessionCookieName(c));
-  if (!cookie) return c.json({ error: 'Sign-in required' }, 401);
+  if (!cookie) return null;
   const id = await sha256Hex(cookie);
   const now = Date.now();
   const row = await c.env.DB.prepare(
     `SELECT s.id AS session_id, s.last_seen, u.* FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.id = ? AND s.expires_at > ?`).bind(id, now).first();
-  if (!row) return c.json({ error: 'Sign-in required' }, 401);
+  if (!row) return null;
   if (now - row.last_seen > SESSION_ROLL_INTERVAL_MS) {
     await c.env.DB.prepare(
       'UPDATE sessions SET last_seen = ?, expires_at = ? WHERE id = ?')
@@ -273,6 +290,16 @@ export async function requireSession(c, next) {
     // at most once an hour per session (no cron in a Worker)
     await c.env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(now).run();
   }
+  return row;
+}
+
+/**
+ * Session middleware for /api/*: loads the user row into c.var.user or
+ * responds 401.
+ */
+export async function requireSession(c, next) {
+  const row = await sessionUser(c);
+  if (!row) return c.json({ error: 'Sign-in required' }, 401);
   c.set('user', row);
   await next();
 }

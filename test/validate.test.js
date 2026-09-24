@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  clampInt, safeText, eventParams, shareEmail, growthParams, profileParams,
-  ValidationError, MAX_ML,
+  clampInt, safeText, eventParams, shareEmail, caregiverName, growthParams,
+  profileParams, ValidationError, MAX_ML,
 } from '../server/validate.js';
 import { isoToWallMs } from '../server/time.js';
 
@@ -128,6 +128,21 @@ describe('profileParams', () => {
       .toThrow(/looks wrong/);
     expect(() => profileParams({ birthDate: '2026-05-01', sex: 'other' }, NOW))
       .toThrow(/girl or boy/);
+  });
+});
+
+describe('caregiverName', () => {
+  it('trims and collapses whitespace', () => {
+    expect(caregiverName('  Granny   Vera ')).toBe('Granny Vera');
+  });
+  it('rejects empty or missing names', () => {
+    expect(() => caregiverName('')).toThrow(ValidationError);
+    expect(() => caregiverName('   ')).toThrow(/name/);
+    expect(() => caregiverName(undefined)).toThrow(ValidationError);
+  });
+  it('caps length at 40 and neutralizes formula triggers (sheet "added by" cell)', () => {
+    expect(caregiverName('x'.repeat(80))).toHaveLength(40);
+    expect(caregiverName('=SUM(A1)').startsWith("'=")).toBe(true);
   });
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { passkeySupported, passkeySignIn, passkeyCancelled } from '../passkeys.js';
 import { Mark, IconChip } from '../components/icons.jsx';
 
 const IN_APP_BROWSER = /FBAN|FBAV|Instagram|Line\/|GSA\/|; wv\)/.test(navigator.userAgent);
@@ -26,6 +27,21 @@ const SCREENS = [
 
 export function SignIn() {
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // For caregivers who joined by invite link and added Face ID /
+  // fingerprint — their only way back in without a fresh link.
+  async function withPasskey() {
+    setBusy(true);
+    setError('');
+    try {
+      await passkeySignIn();
+      location.replace('/');
+    } catch (err) {
+      if (!passkeyCancelled(err)) setError(err.message);
+      setBusy(false);
+    }
+  }
 
   // Map a known ?auth_error code to a fixed message; never reflect the raw
   // value (that would put attacker text on our own origin). Then strip it.
@@ -44,7 +60,7 @@ export function SignIn() {
         <h1>tinyloops</h1>
         <p className="headline">The newborn weeks, without losing count</p>
         <p className="tagline">Feeds, sleep, nappies and growth — logged in one tap,
-          shared with your partner, saved in a Google Sheet that’s yours.</p>
+          shared with everyone who helps, saved in a Google Sheet that’s yours.</p>
         {IN_APP_BROWSER && (
           <p className="warn">It looks like this page is open inside another app,
             where Google blocks sign-in. Open it in Safari or Chrome instead.</p>
@@ -52,6 +68,11 @@ export function SignIn() {
         <button className="primary cta" onClick={() => { location.href = '/auth/login'; }}>
           Sign in with Google
         </button>
+        {passkeySupported() && (
+          <button className="linkish passkey-btn" disabled={busy} onClick={withPasskey}>
+            {busy ? 'Waiting for your device…' : 'Sign in with a passkey'}
+          </button>
+        )}
         <p className="cta-note">Free, no subscriptions</p>
         {error && <p className="status error">{error}</p>}
       </div>
@@ -74,8 +95,9 @@ export function SignIn() {
         </div>
         <div className="feature">
           <IconChip k="feed" />
-          <div><b>Built for two</b>
-            <span>Invite your partner — same log on both phones, no handover mix-ups</span></div>
+          <div><b>Built for everyone who helps</b>
+            <span>Partner, grandparents, nanny — one shared log on every phone,
+              and caregivers join with just a link, no Google account needed</span></div>
         </div>
         <div className="feature">
           <IconChip k="chart" />
@@ -101,7 +123,7 @@ export function SignIn() {
         <ol className="steps">
           <li>Sign in with your Google account</li>
           <li>tinyloops creates one spreadsheet in your Drive — that’s the whole “database”</li>
-          <li>Invite your partner and start logging</li>
+          <li>Invite your caregivers with a link and start logging</li>
         </ol>
       </div>
 

@@ -8,6 +8,7 @@ import { Tracker } from './routes/Tracker.jsx';
 import { Stats } from './routes/Stats.jsx';
 import { Growth } from './routes/Growth.jsx';
 import { Privacy, Terms } from './routes/Legal.jsx';
+import { Join } from './routes/Join.jsx';
 
 // Resolve the session once at the app root: decides sign-in vs connect vs
 // the tracker. The App shell reads this (via useOutletContext) and redirects
@@ -28,6 +29,9 @@ export const router = createBrowserRouter([
   // OAuth consent screen).
   { path: '/privacy', element: <Privacy />, errorElement: <ErrorScreen /> },
   { path: '/terms', element: <Terms />, errorElement: <ErrorScreen /> },
+  // The caregiver join page is public too: the visitor typically has no
+  // session yet, so it must not ride the App shell's sign-in redirect.
+  { path: '/join/:code', element: <Join />, errorElement: <ErrorScreen /> },
   {
     path: '/',
     element: <App />,
