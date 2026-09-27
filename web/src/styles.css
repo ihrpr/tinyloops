@@ -479,6 +479,9 @@ details.platform[open] summary::after { transform: rotate(225deg); }
   font-weight: 600; font-size: 14px;
 }
 .stop-btn:hover { border-color: var(--danger); color: var(--danger); }
+/* "Stopping…" is wider than "Stop" — tighter padding keeps the card row
+   from reflowing during the write */
+.stop-btn:disabled { padding: 9px 10px; }
 
 /* ---------- day summary ---------- */
 
