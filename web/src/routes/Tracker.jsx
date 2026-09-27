@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { api, DEMO } from '../api.js';
 import { useHome } from '../useHome.js';
+import { useDay } from '../useDay.js';
 import { useToast } from '../components/Toast.jsx';
 import { Chrome } from '../components/Chrome.jsx';
 import { OpenTimers } from '../components/OpenTimers.jsx';
@@ -16,6 +17,7 @@ import { ReauthBanner } from '../components/ReauthBanner.jsx';
 export function Tracker() {
   useOutletContext(); // session (kept for parity; data comes from useHome)
   const { home, status, needsReauth, load, run } = useHome();
+  const dayState = useDay(home);
   const showToast = useToast();
   const [editing, setEditing] = useState(null);   // raw event or null
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -35,8 +37,16 @@ export function Tracker() {
 
   const demoBlock = () => showToast('Demo mode — changes are not saved.');
 
+  // every write goes through here: an edit can touch any day, so drop the
+  // day cache and let the selected day refetch alongside the fresh home
+  const runWrite = async (fn, onError) => {
+    const resp = await run(fn, onError);
+    if (resp) dayState.invalidate();
+    return resp;
+  };
+
   const stop = (id) => DEMO ? demoBlock()
-    : run(() => api(`/api/events/${id}/stop`, { method: 'POST', body: {} }), err);
+    : runWrite(() => api(`/api/events/${id}/stop`, { method: 'POST', body: {} }), err);
 
   async function signOut() {
     if (!DEMO) { try { await api('/auth/logout', { method: 'POST' }); } catch { /* signed out anyway */ } }
@@ -48,7 +58,7 @@ export function Tracker() {
     catch (e) { err(e.message); }
   }
 
-  const wrappedRun = DEMO ? (() => { demoBlock(); return Promise.resolve(null); }) : run;
+  const wrappedRun = DEMO ? (() => { demoBlock(); return Promise.resolve(null); }) : runWrite;
 
   return (
     <Chrome topDate={home.topDate} sheetUrl={home.sheetUrl} onSettings={() => setSettingsOpen(true)}>
@@ -59,16 +69,19 @@ export function Tracker() {
           <OpenTimers open={home.open} onEdit={setEditing} onStop={stop} />
           <QuickLog home={home} run={wrappedRun} onError={err} onLogged={toast} />
           <h2>Day summary</h2>
-          <DaySummary summary={home.summary} onEditNursing={() => setSettingsOpen(true)} />
+          <DaySummary summary={home.summary} day={dayState.day} nav={dayState}
+            onEditNursing={() => setSettingsOpen(true)} />
         </div>
         <div className="col-b">
-          <h2>Today &amp; yesterday</h2>
-          <EntryList list={home.list} onEdit={setEditing} />
+          {/* the list follows the day picked in the summary (default today) */}
+          <h2>{dayState.day ? dayState.day.name : 'Today'}</h2>
+          <EntryList day={dayState.day} onEdit={setEditing} />
         </div>
       </div>
 
       <div className="footer-actions">
-        <button className="linkish" onClick={load}>Refresh</button>
+        <button className="linkish"
+          onClick={() => { dayState.invalidate(); load(); }}>Refresh</button>
         {/* guests joined someone else's sheet: sharing and sheet management
             belong to the Google-signed-in family members */}
         {!home.guest && (

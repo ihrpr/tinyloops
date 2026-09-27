@@ -1,38 +1,52 @@
-import { useState } from 'react';
 import { IconChip } from './icons.jsx';
 import { DayBand, Legend, hasNight } from './charts/Rhythm.jsx';
 
-// The day-summary widget from /api/home: a day drawn as a 24h line on top,
-// the summary rows below — the SAME layout for every day. Paging back (the
-// server ships the last 7 days in one payload — no extra fetches) swaps in
-// that day's rows; only today carries the now-statuses (feeding now, awake
-// for…) and the assumed-ml note. All values and labels arrive formatted from
-// the server; this only lays them out. `r.k` is the server's icon key.
-export function DaySummary({ summary, onEditNursing }) {
-  const days = summary.days;
-  const [idx, setIdx] = useState(() => (days ? days.length - 1 : 0));
+// The day-summary widget: one day drawn as a 24h line on top, the summary
+// rows below — the SAME layout for every day. Which day shows is owned by
+// the parent (useDay), so the entry list follows the same selection. Paging
+// through the recent days is instant (they ship with /api/home); older days
+// arrive from /api/days/:date. The day name is also a native date picker,
+// bounded by the server's firstDate — jump anywhere the data goes. All
+// values, labels and paging pointers arrive formatted from the server; this
+// only lays them out. `r.k` is the server's icon key.
+export function DaySummary({ summary, day, nav, onEditNursing }) {
   if (summary.empty) {
     return <div className="card" id="summary"><div className="empty-note">{summary.note}</div></div>;
   }
-  const day = days ? days[Math.min(idx, days.length - 1)] : null;
-  const rows = day && !day.today ? day.rows : summary.rows;
+  const days = summary.days;
+  const today = days[days.length - 1];
+  const rows = day ? (day.today ? summary.rows : day.rows) : [];
   return (
     <div className="card" id="summary">
-      {day && (
-        <div className="sum-day">
-          <div className="day-nav">
-            <button aria-label="Previous day" disabled={idx === 0}
-              onClick={() => setIdx(idx - 1)}>‹</button>
-            <span className="day-name">{day.name}{day.mood ? ` ${day.mood}` : ''}</span>
-            <button aria-label="Next day" disabled={idx === days.length - 1}
-              onClick={() => setIdx(idx + 1)}>›</button>
-          </div>
-          <DayBand day={day} nowMin={summary.nowMin} />
-          {/* legend stays stable while paging: keyed to the whole week */}
-          <Legend night={hasNight(days)} />
+      <div className="sum-day">
+        <div className="day-nav">
+          <button aria-label="Previous day" disabled={!day?.prev}
+            onClick={nav.prev}>‹</button>
+          <span className="day-name">
+            {day ? `${day.name}${day.mood ? ` ${day.mood}` : ''}` : '…'}
+            <span className="day-caret" aria-hidden="true">▾</span>
+            {/* invisible overlay: tapping the name opens the OS date picker.
+                Mobile opens it from any tap; desktop only opens it from the
+                (invisible) calendar icon, hence the explicit showPicker() */}
+            <input type="date" aria-label="Pick a day"
+              value={day ? day.date : today.date}
+              min={summary.firstDate} max={today.date}
+              onClick={(e) => { try { e.target.showPicker?.(); } catch { /* keeps focus; arrows still work */ } }}
+              onChange={(e) => { if (e.target.value) nav.go(e.target.value); }} />
+          </span>
+          <button aria-label="Next day" disabled={day ? !day.next : false}
+            onClick={nav.next}>›</button>
         </div>
-      )}
-      {rows.length === 0 && <div className="empty-note">Nothing logged this day.</div>}
+        {day && (
+          <>
+            <DayBand day={day} nowMin={summary.nowMin} />
+            {/* legend stays stable while paging: keyed to the shipped days */}
+            <Legend night={hasNight([...days, day])} />
+          </>
+        )}
+      </div>
+      {!day && <div className="empty-note">{nav.error || 'Loading that day…'}</div>}
+      {day && rows.length === 0 && <div className="empty-note">Nothing logged this day.</div>}
       {rows.map((r, i) => r.kind === 'sub' ? (
         <div className="sum-row sub" key={i}>
           <span className="lbl">{r.label}</span>
@@ -45,7 +59,7 @@ export function DaySummary({ summary, onEditNursing }) {
           <span className="v">{r.value}</span>
         </div>
       ))}
-      {(!day || day.today) && summary.note && (
+      {day?.today && summary.note && (
         <div className="sum-note" onClick={onEditNursing}>{summary.note}</div>
       )}
     </div>

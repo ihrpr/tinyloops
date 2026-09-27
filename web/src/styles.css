@@ -626,6 +626,16 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 .day-name {
   font-family: var(--display); font-weight: 800; font-size: 15px;
   min-width: 130px; text-align: center;
+  position: relative; cursor: pointer;
+}
+/* the day name is also a date picker: an invisible native input overlays it,
+   so tapping the name opens the OS calendar (bounded by the data range);
+   the caret is the visible hint that the name is tappable */
+.day-name .day-caret { color: var(--muted); font-size: 11px; margin-left: 5px; }
+.day-name input[type="date"] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: 0; padding: 0; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
 }
 .day-band { display: block; width: 100%; height: auto; }
 .explore-pick { display: flex; align-items: center; gap: 8px; font-size: 13px;

@@ -56,7 +56,10 @@ function fmtDay(w, nowWall) {
   const today = dayStart(nowWall);
   if (w >= today) return 'Today';
   if (w >= today - MS_PER_DAY) return 'Yesterday';
-  return `${DAYS[d(w).getUTCDay()]} ${d(w).getUTCDate()} ${MONTHS[d(w).getUTCMonth()]}`;
+  // history pages back years now — a bare "Sat 20 Sep" would be ambiguous
+  const year = d(w).getUTCFullYear() !== d(nowWall).getUTCFullYear()
+    ? ` ${d(w).getUTCFullYear()}` : '';
+  return `${DAYS[d(w).getUTCDay()]} ${d(w).getUTCDate()} ${MONTHS[d(w).getUTCMonth()]}${year}`;
 }
 
 const agoDur = (w, nowWall) => {
@@ -167,6 +170,58 @@ function eventDetails(e) {
 // a running timer this old was probably just forgotten — nudge to fix it
 const STALE_MIN = { feed: 120, play: 180, sleep: 840 };
 
+/** Midnight of the earliest logged day, clamped to today — the floor the
+ *  day pager can reach. Today when nothing is logged yet. */
+function firstDayOf(events, today) {
+  let first = Infinity;
+  for (const e of events) {
+    if (e.startWall != null && e.startWall < first) first = e.startWall;
+  }
+  return first === Infinity ? today : Math.min(dayStart(first), today);
+}
+
+/** One day's entries, newest first — what the entry list renders. An event
+ *  belongs to the day it STARTED (a sleep crossing midnight stays on its
+ *  bedtime day; the running copy is on the open-timers card anyway). */
+function dayEntries(events, s, nowWall) {
+  const end = s + MS_PER_DAY;
+  return events
+    .filter((e) => e.startWall != null && e.startWall >= s && e.startWall < end)
+    .map((e) => {
+      const t = TYPES[e.type] || { label: e.type, emoji: '❓', timed: false };
+      const running = t.timed && !e.endWall;
+      return {
+        id: e.id, type: e.type, emoji: t.emoji, label: t.label,
+        details: eventDetails(e),
+        time: fmtTime(e.startWall),
+        dur: running ? fmtMin(elapsedMin(e, nowWall)) + '…'
+          : e.durationMin != null ? fmtMin(e.durationMin) : '',
+        raw: rawEvent(e),
+      };
+    });
+}
+
+/**
+ * Everything the client shows for one selected day: the 24h band, the
+ * summary rows, the entry list — plus `prev`/`next` date pointers so paging
+ * is pure link-following. `prev` stops at the first day with data, `next`
+ * at today; the client never does date arithmetic.
+ */
+function dayPayload(events, s, { en, assumedMl, nowWall, today, firstDay }) {
+  const isToday = s === today;
+  return {
+    date: wallMsToDate(s),
+    name: fmtDay(s, nowWall),
+    today: isToday,
+    ...dayShape(events, s, nowWall),
+    mood: dayMood(events, s),
+    rows: summaryRows(events, s, en, assumedMl, nowWall, isToday),
+    entries: dayEntries(events, s, nowWall),
+    prev: s > firstDay ? wallMsToDate(s - MS_PER_DAY) : null,
+    next: s < today ? wallMsToDate(s + MS_PER_DAY) : null,
+  };
+}
+
 // ---------- the home payload (log tab: form meta, open timers, summary, list) ----------
 
 export function buildHome(events, settings, nowWall) {
@@ -209,26 +264,6 @@ export function buildHome(events, settings, nowWall) {
       };
     });
 
-  // today & yesterday list, grouped by day label
-  const cutoff = dayStart(nowWall) - MS_PER_DAY;
-  const recent = events.filter((e) => e.startWall != null &&
-    (e.startWall >= cutoff || (e.endWall && e.endWall >= cutoff) || (isTimed(e) && !e.endWall)));
-  const list = [];
-  for (const e of recent) {
-    const day = fmtDay(e.startWall, nowWall);
-    if (!list.length || list[list.length - 1].day !== day) list.push({ day, entries: [] });
-    const t = TYPES[e.type] || { label: e.type, emoji: '❓', timed: false };
-    const running = t.timed && !e.endWall;
-    list[list.length - 1].entries.push({
-      id: e.id, type: e.type, emoji: t.emoji, label: t.label,
-      details: eventDetails(e),
-      time: fmtTime(e.startWall),
-      dur: running ? fmtMin(elapsedMin(e, nowWall)) + '…'
-        : e.durationMin != null ? fmtMin(e.durationMin) : '',
-      raw: rawEvent(e),
-    });
-  }
-
   return {
     topDate,
     types,
@@ -243,7 +278,6 @@ export function buildHome(events, settings, nowWall) {
     solidFoods: en.has('solid') ? foodChips(events) : [],
     open,
     summary: buildSummary(events, settings, nowWall),
-    list,
   };
 }
 
@@ -400,27 +434,26 @@ function buildSummary(events, settings, nowWall) {
 
   const rows = summaryRows(events, dayStartMs, en, assumedMl, nowWall, true);
 
-  // the day strip drawn above the rows, pageable back through the week: one
-  // payload, no extra sheet reads. Past days carry their own rows (same
-  // layout as today, minus the now-statuses); today's rows are the top-level
-  // `rows` so they aren't shipped twice. Omitted when the week is empty.
+  // The recent days ship with the home payload — paging within them costs
+  // no extra sheet reads; older days are fetched one at a time from
+  // /api/days/:date, back to `firstDate` (as far as the data goes). The
+  // window starts at the first logged day, so a young tracker never pages
+  // into blank days. Past days carry their own rows (same layout as today,
+  // minus the now-statuses); today's rows are the top-level `rows` so they
+  // aren't shipped twice.
+  const firstDay = firstDayOf(events, dayStartMs);
+  const ctx = { en, assumedMl, nowWall, today: dayStartMs, firstDay };
   const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const s = dayStartMs - i * MS_PER_DAY;
-    days.push({
-      ...dayShape(events, s, nowWall),
-      date: wallMsToDate(s),
-      name: fmtDay(s, nowWall),
-      today: i === 0,
-      mood: dayMood(events, s),
-      ...(i > 0 && { rows: summaryRows(events, s, en, assumedMl, nowWall, false) }),
-    });
+  for (let s = Math.max(dayStartMs - 6 * MS_PER_DAY, firstDay); s <= dayStartMs; s += MS_PER_DAY) {
+    const day = dayPayload(events, s, ctx);
+    if (day.today) delete day.rows;
+    days.push(day);
   }
 
   return {
     empty: false,
-    days: days.some((day) => day.spans.length || day.feeds.length || day.rows?.length)
-      ? days : null,
+    days,
+    firstDate: wallMsToDate(firstDay), // the date picker's lower bound
     nowMin: Math.round((nowWall - dayStartMs) / MS_PER_MIN),
     rows,
     note: en.has('feed') ? `1 breastfeed ≈ ${assumedMl}ml — tap to change` : null,
@@ -643,9 +676,7 @@ export function buildRhythm(events, settings, nowWall, fromWall, toWall) {
   // label crowding control, same steps as the milk chart
   const labelStep = n <= 14 ? 1 : n <= 31 ? 2 : n <= 45 ? 5 : 10;
 
-  let firstWall = Infinity;
-  for (const e of events) if (e.startWall != null && e.startWall < firstWall) firstWall = e.startWall;
-  const firstDay = firstWall === Infinity ? today : dayStart(firstWall);
+  const firstDay = firstDayOf(events, today);
   const nw = nightWindow(settings);
   const cur = rhythmWindow(events, today - 7 * MS_PER_DAY, firstDay, nowWall, nw);
   const prev = rhythmWindow(events, today - 14 * MS_PER_DAY, firstDay, nowWall, nw);
@@ -777,28 +808,19 @@ export function buildExplore(events, settings, nowWall, fromWall, toWall) {
   };
 }
 
-/** One day's entries (the /api/days/:date endpoint). */
-export function buildDay(events, date, nowWall) {
-  const start = date;
-  const end = start + MS_PER_DAY;
-  const dd = d(start);
-  const entries = events
-    .filter((e) => e.startWall >= start && e.startWall < end)
-    .map((e) => {
-      const t = TYPES[e.type] || { label: e.type, emoji: '❓', timed: false };
-      const running = t.timed && !e.endWall;
-      return {
-        id: e.id, type: e.type, emoji: t.emoji, label: t.label,
-        details: eventDetails(e),
-        time: fmtTime(e.startWall),
-        dur: running ? fmtMin(elapsedMin(e, nowWall)) + '…'
-          : e.durationMin != null ? fmtMin(e.durationMin) : '',
-        raw: rawEvent(e),
-      };
-    });
-  return {
-    date: wallMsToDate(start),
-    label: `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}`,
-    entries,
-  };
+/**
+ * One selected day (the /api/days/:date endpoint) — the same payload shape
+ * the home summary ships for the recent days, so the client pages further
+ * back with one small fetch per day. Dates are clamped to today.
+ */
+export function buildDay(events, date, nowWall, settings) {
+  const today = dayStart(nowWall);
+  const s = Math.min(dayStart(date), today);
+  return dayPayload(events, s, {
+    en: enabledTypes(settings),
+    assumedMl: Number(settings.breastfeed_ml) || 60,
+    nowWall,
+    today,
+    firstDay: firstDayOf(events, today),
+  });
 }

@@ -285,7 +285,7 @@ app.use('/api/*', async (c, next) => {
   if (path.startsWith('/api/days/')) {
     const date = isoToWallMs(path.slice('/api/days/'.length));
     if (date == null) return c.json({ error: 'Invalid date.' }, 400);
-    return c.json(buildDay(events, date, now));
+    return c.json(buildDay(events, date, now, DEMO_SETTINGS));
   }
   if (path === '/api/growth') {
     const g = demoGrowth(now);
@@ -399,7 +399,7 @@ app.get('/api/days/:date', async (c) => {
   const date = isoToWallMs(c.req.param('date'));
   if (date == null) return c.json({ error: 'Invalid date.' }, 400);
   const state = await loadState(c);
-  return c.json(buildDay(state.events, dayStart(date), nowWall(c)));
+  return c.json(buildDay(state.events, date, nowWall(c), state.settings));
 });
 
 // ---------- growth (measurements + WHO centile charts) ----------

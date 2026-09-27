@@ -84,11 +84,23 @@ describe('buildHome', () => {
     expect(sleep.ago).toBe('awake for 3h');  // slept 10:00–11:00, now 14:00
   });
 
-  it('groups the list into Today and Yesterday only', () => {
-    expect(home.list.map((g) => g.day)).toEqual(['Today', 'Yesterday']);
-    expect(home.list[0].entries.map((e) => e.time)).toEqual(
+  it('ships each day’s entries on its summary day, newest first', () => {
+    const days = home.summary.days;
+    const today = days[days.length - 1];
+    expect(today.entries.map((e) => e.time)).toEqual(
       ['13:30', '11:00', '10:00', '09:00', '08:00', '07:00']);
-    expect(home.list[1].entries).toHaveLength(2);
+    expect(days[days.length - 2].name).toBe('Yesterday');
+    expect(days[days.length - 2].entries).toHaveLength(2);
+  });
+
+  it('pages by server-computed pointers, back to the first logged day', () => {
+    const days = home.summary.days;
+    expect(days).toHaveLength(7); // data (20 Aug) predates the shipped window
+    expect(home.summary.firstDate).toBe('2026-08-20');
+    expect(days[0].prev).toBe('2026-08-22'); // older days come from /api/days
+    expect(days[1].prev).toBe(days[0].date);
+    expect(days[days.length - 1].next).toBe(null); // today is the far edge
+    expect(days[days.length - 2].next).toBe(days[days.length - 1].date);
   });
 
   it('suggests the opposite side from the last recorded feed', () => {
@@ -106,7 +118,6 @@ describe('buildHome', () => {
   it('handles the empty sheet', () => {
     const h = buildHome([], SETTINGS, NOW);
     expect(h.summary.empty).toBe(true);
-    expect(h.list).toEqual([]);
     expect(h.open).toEqual([]);
   });
 });
@@ -172,7 +183,7 @@ describe('free text travels as raw data (client is the single escape boundary)',
     const events = newestFirst([
       ev('feed', '2026-08-25T09:00', { notes: 'a & b <c>', by: 'p@x.com' }),
     ]);
-    const day = buildDay(events, isoToWallMs('2026-08-25'), NOW);
+    const day = buildDay(events, isoToWallMs('2026-08-25'), NOW, SETTINGS);
     // the server must NOT HTML-escape: it would compound with the client's
     // esc() and render "a &amp; b" to the user
     expect(day.entries[0].details).toContain('a & b <c>');
@@ -183,17 +194,37 @@ describe('free text travels as raw data (client is the single escape boundary)',
 });
 
 describe('buildDay', () => {
-  it('returns one day’s entries with labels', () => {
-    const events = newestFirst([
-      ev('feed', '2026-08-25T09:00', { durationMin: 20, side: 'L' }),
-      ev('wet', '2026-08-25T10:00'),
-      ev('feed', '2026-08-26T09:00', { durationMin: 20 }),
-    ]);
-    const day = buildDay(events, isoToWallMs('2026-08-25'), NOW);
-    expect(day.label).toBe('Tue 25 Aug');
+  const events = newestFirst([
+    ev('feed', '2026-08-25T09:00', { durationMin: 20, side: 'L' }),
+    ev('wet', '2026-08-25T10:00'),
+    ev('feed', '2026-08-26T09:00', { durationMin: 20 }),
+  ]);
+
+  it('returns the full day payload: entries, rows, band and paging pointers', () => {
+    const day = buildDay(events, isoToWallMs('2026-08-25'), NOW, SETTINGS);
+    expect(day.name).toBe('Tue 25 Aug');
+    expect(day.date).toBe('2026-08-25');
+    expect(day.today).toBe(false);
     expect(day.entries).toHaveLength(2);
     expect(day.entries.map((e) => e.time)).toEqual(['10:00', '09:00']);
     expect(day.entries[1].details).toBe('left · by partner');
+    // the same summary layout the home widget shows, minus now-statuses
+    expect(day.rows.find((r) => r.label === 'Milk').value).toBe('≈60ml');
+    expect(day.rows.find((r) => r.label === 'Nappies').value).toBe('1 wet · 0 dirty');
+    expect(day.rows.every((r) => !r.ago)).toBe(true);
+    expect(day.feeds).toEqual([9 * 60]);
+    // 25 Aug is the first logged day: nowhere earlier to page to
+    expect(day.prev).toBe(null);
+    expect(day.next).toBe('2026-08-26');
+  });
+
+  it('names other years explicitly and clamps future dates to today', () => {
+    const old = buildDay(events, isoToWallMs('2025-08-25'), NOW, SETTINGS);
+    expect(old.name).toBe('Mon 25 Aug 2025');
+    const future = buildDay(events, isoToWallMs('2026-09-10'), NOW, SETTINGS);
+    expect(future.date).toBe('2026-08-29');
+    expect(future.today).toBe(true);
+    expect(future.next).toBe(null);
   });
 });
 
@@ -207,7 +238,7 @@ describe('solids', () => {
   ]);
 
   it('renders eaten amount, not a nursing side, in the entry details', () => {
-    const day = buildDay(events, isoToWallMs('2026-08-29'), NOW);
+    const day = buildDay(events, isoToWallMs('2026-08-29'), NOW, SOLID_SETTINGS);
     const solid = day.entries.find((e) => e.type === 'solid' && e.time === '12:30');
     expect(solid.details).toContain('ate some');
     expect(solid.details).toContain('carrot, porridge');
@@ -317,7 +348,7 @@ describe('buildRhythm', () => {
     expect(r.days[28].name).toBe('Today');
   });
 
-  it('ships a pageable week of day strips in the home summary', () => {
+  it('ships pageable day strips in the home summary, starting at the first data', () => {
     const { summary } = buildHome(newestFirst([
       ev('sleep', '2026-08-28T22:00', { durationMin: 240 }), // night tail → 02:00
       ev('sleep', '2026-08-29T13:00', { open: true }),       // running, now = 14:00
@@ -326,10 +357,13 @@ describe('buildRhythm', () => {
       ev('pump', '2026-08-29T08:00', { amountMl: 90 }),
       ev('feed', '2026-08-26T10:00', { durationMin: 15 }),   // three days back
     ]), SETTINGS, NOW);
-    expect(summary.days).toHaveLength(7);
+    // tracking began 26 Aug — the pager never shows blank days before that
+    expect(summary.days).toHaveLength(4);
+    expect(summary.firstDate).toBe('2026-08-26');
+    expect(summary.days[0].prev).toBe(null);
     expect(summary.nowMin).toBe(14 * 60);
 
-    const today = summary.days[6];
+    const today = summary.days[3];
     expect(today.name).toBe('Today');
     expect(today.today).toBe(true);
     expect(today.spans).toEqual([{ a: 0, b: 2 * 60 }, { a: 13 * 60, b: 14 * 60 }]);
@@ -338,7 +372,7 @@ describe('buildRhythm', () => {
 
     // paging back: past days carry the SAME row layout as today, minus the
     // now-statuses. Yesterday holds the pre-midnight half of the night sleep.
-    const yesterday = summary.days[5];
+    const yesterday = summary.days[2];
     expect(yesterday.name).toBe('Yesterday');
     expect(yesterday.spans).toEqual([{ a: 22 * 60, b: 24 * 60 }]);
     const ySleep = yesterday.rows.find((r) => r.label === 'Sleep');
@@ -346,13 +380,14 @@ describe('buildRhythm', () => {
     expect(ySleep.ago).toBe(''); // no awake-for on a past day
     expect(yesterday.rows.every((r) => !r.ago)).toBe(true); // no recency on past days
 
-    const wed = summary.days[3];
+    const wed = summary.days[0];
     expect(wed.name).toBe('Wed 26 Aug');
     expect(wed.rows.find((r) => r.label === 'Milk').value).toBe('≈60ml');
     expect(wed.rows.find((r) => r.kind === 'sub').value).toBe('1× · ≈60ml');
 
     // an untouched day pages to an empty row list
-    expect(summary.days[0].rows).toEqual([]);
+    expect(summary.days[1].rows).toEqual([]);
+    expect(summary.days[1].entries).toEqual([]);
   });
 
   it('ships the night window with the home settings', () => {
@@ -381,7 +416,9 @@ describe('buildRhythm', () => {
     expect(subs).toEqual(['Night: 9h 30m', 'Naps: 2× · 2h 30m']);
 
     // the band paints night spans in their own colour via the flag
-    expect(summary.days[6].spans).toEqual([
+    // (tracking began 28 Aug, so the window is two days: yesterday + today)
+    expect(summary.days).toHaveLength(2);
+    expect(summary.days[1].spans).toEqual([
       { a: 0, b: 6 * 60, night: true },
       { a: 9 * 60, b: 10 * 60 },
       { a: 12.5 * 60, b: 14 * 60 },
@@ -389,7 +426,7 @@ describe('buildRhythm', () => {
 
     // that night belongs to today's morning — yesterday's summary must not
     // count it, and without night-marking in a day there are no subs
-    const yesterday = summary.days[5];
+    const yesterday = summary.days[0];
     expect(yesterday.rows.find((r) => r.label === 'Sleep')).toBeUndefined();
   });
 
@@ -400,13 +437,16 @@ describe('buildRhythm', () => {
     expect(summary.rows.find((r) => r.label === 'Milk today').value).toBe('80ml');
   });
 
-  it('omits the day strips while the whole week is empty', () => {
+  it('reaches data older than the shipped window through the prev pointer', () => {
     const { summary } = buildHome(newestFirst([
       ev('wet', '2026-08-29T09:00'),
       ev('sleep', '2026-08-10T20:00', { durationMin: 600 }), // beyond the week
     ]), SETTINGS, NOW);
     expect(summary.empty).toBe(false);
-    expect(summary.days).toBe(null);
+    expect(summary.days).toHaveLength(7);
+    expect(summary.firstDate).toBe('2026-08-10');
+    // the oldest shipped day still points further back — /api/days serves it
+    expect(summary.days[0].prev).toBe('2026-08-22');
   });
 
   it('computes trend tiles over complete days, ignoring days before tracking began', () => {
@@ -513,11 +553,12 @@ describe('day mood', () => {
     ]), SETTINGS, NOW);
     const row = summary.rows.find((r) => r.label === 'Day mood');
     expect(row.value).toBe('😐 a mixed day · teething');
-    expect(summary.days[6].mood).toBe('😐');   // today
-    expect(summary.days[5].mood).toBe('😞');   // yesterday
-    expect(summary.days[4].mood).toBe(null);
+    // tracking began 28 Aug → a two-day window: yesterday + today
+    expect(summary.days).toHaveLength(2);
+    expect(summary.days[1].mood).toBe('😐');   // today
+    expect(summary.days[0].mood).toBe('😞');   // yesterday
     // paging back shows the same row layout, mood included
-    expect(summary.days[5].rows.find((r) => r.label === 'Day mood').value)
+    expect(summary.days[0].rows.find((r) => r.label === 'Day mood').value)
       .toBe('😞 a hard day');
   });
 

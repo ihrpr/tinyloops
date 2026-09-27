@@ -14,6 +14,17 @@ test('demo log view renders the tracker', async ({ page }) => {
   // the name may carry a day-mood emoji ("Yesterday 😊")
   await expect(page.locator('#summary .day-name')).toContainText('Yesterday');
   await expect(page.locator('#summary .day-band')).toBeVisible();
+  // the entry list follows the selected day (its h2 renders uppercase via CSS)
+  await expect(page.locator('.col-b h2')).toHaveText(/yesterday/i);
+
+  // the day name doubles as a date picker: jump past the shipped week, so
+  // the day comes from /api/days — band, rows and list must still render
+  const back20 = new Date(Date.now() - 20 * 864e5);
+  const iso = back20.toISOString().slice(0, 10);
+  await page.locator('.day-name input[type=date]').fill(iso);
+  await expect(page.locator('#summary .day-band')).toBeVisible();
+  await expect(page.locator('#summary .day-name')).not.toContainText('Yesterday');
+  await expect(page.locator('#todayList .evt').first()).toBeVisible();
 });
 
 test('demo stats view renders charts with actual bars', async ({ page }) => {
