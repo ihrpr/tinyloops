@@ -166,6 +166,32 @@ describe('side vocabulary per type', () => {
   });
 });
 
+describe('bottle leftovers', () => {
+  it('keeps the offered amounts and passes the leftover through', () => {
+    const p = eventParams({ type: 'bottle', start: '2026-08-29T12:00',
+      amountMl: 80, formulaMl: 40, leftoverMl: 30 });
+    expect(p.leftoverMl).toBe(30);
+    expect(p.side).toBe(''); // the side column stays free
+    expect(p.amountMl).toBe(80); // the record stays what was offered
+    expect(p.formulaMl).toBe(40);
+  });
+  it('a zero or missing leftover stays blank', () => {
+    expect(eventParams({ type: 'bottle', start: '2026-08-29T12:00',
+      amountMl: 80, leftoverMl: 0 }).leftoverMl).toBeUndefined();
+    expect(eventParams({ type: 'bottle', start: '2026-08-29T12:00',
+      amountMl: 80 }).leftoverMl).toBeUndefined();
+  });
+  it('rejects a leftover beyond the bottle, or with an empty bottle', () => {
+    expect(() => eventParams({ type: 'bottle', start: '2026-08-29T12:00',
+      amountMl: 80, formulaMl: 40, leftoverMl: 130 })).toThrow(/more than the 120ml/);
+    expect(() => eventParams({ type: 'bottle', start: '2026-08-29T12:00',
+      leftoverMl: 30 })).toThrow(/what was in the bottle/);
+  });
+  it('bottles take no nursing side', () => {
+    expect(eventParams({ type: 'bottle', start: '2026-08-29T12:00', side: 'L' }).side).toBe('');
+  });
+});
+
 describe('medicine entries', () => {
   it('accepts a named medicine, name + dose as one text', () => {
     const p = eventParams({ type: 'med', start: '2026-08-29T12:00', notes: 'Calpol 2.5 ml' });

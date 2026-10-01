@@ -110,7 +110,7 @@ export function eventParams(body) {
   const sides = type === 'solid' ? ['taste', 'some', 'lots']
     : type === 'sleep' ? ['night']
     : type === 'mood' ? ['good', 'mixed', 'bad']
-    : type === 'med' ? [] : ['L', 'R', 'both'];
+    : type === 'med' || type === 'bottle' ? [] : ['L', 'R', 'both'];
   // a medicine entry is its name+dose text — without it the row says nothing
   if (type === 'med' && !String(body.notes || '').trim()) {
     throw new ValidationError('Which medicine? Add its name (and dose), e.g. Calpol 2.5 ml.');
@@ -122,6 +122,24 @@ export function eventParams(body) {
     formulaMl: clampInt(body.formulaMl, MAX_ML),
     notes: safeText(body.notes),
   };
+  // an unfinished bottle: the leftover gets its own sheet column
+  // (leftover_ml, K); the views deduct it pro-rata from milk and formula.
+  // The offered amounts stay the stored record, so the leftover can always
+  // be corrected later.
+  if (type === 'bottle') {
+    const left = clampInt(body.leftoverMl, MAX_ML);
+    if (left) {
+      const offered = (p.amountMl || 0) + (p.formulaMl || 0);
+      if (!offered) {
+        throw new ValidationError('Add what was in the bottle before the leftover.');
+      }
+      if (left > offered) {
+        throw new ValidationError(
+          `That leftover is more than the ${offered}ml the bottle held.`);
+      }
+      p.leftoverMl = left;
+    }
+  }
   const dur = clampInt(body.durationMin, MAX_DURATION_MIN);
   if (dur != null && dur > 0) p.durationMin = dur;
   return p;

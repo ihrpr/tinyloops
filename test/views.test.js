@@ -14,7 +14,7 @@ function ev(type, startIso, o = {}) {
     endWall: o.open ? null : durationMin != null ? startWall + durationMin * 60000 : null,
     durationMin, side: o.side || '', amountMl: o.amountMl ?? null,
     notes: o.notes || '', loggedBy: o.by || 'partner@example.com',
-    formulaMl: o.formulaMl ?? null,
+    formulaMl: o.formulaMl ?? null, leftoverMl: o.leftoverMl ?? null,
   };
 }
 
@@ -362,6 +362,64 @@ describe('medicines', () => {
     expect(home.summary.rows.find((r) => r.label === 'Medicine')).toBeDefined();
     const none = buildHome(newestFirst([ev('wet', '2026-08-29T07:00')]), SETTINGS, NOW);
     expect(none.summary.rows.find((r) => r.label === 'Medicine')).toBeUndefined();
+  });
+});
+
+describe('unfinished bottles (leftover_ml column)', () => {
+  const bottle = ev('bottle', '2026-08-29T11:00',
+    { amountMl: 80, formulaMl: 40, leftoverMl: 30 });
+
+  it('totals deduct the leftover pro-rata — the bottle was mixed', () => {
+    const h = buildHome([bottle], SETTINGS, NOW);
+    // offered 120, left 30 → took 90: milk 80→60, formula 40→30
+    expect(h.summary.rows.find((r) => r.label === 'Milk today').value).toBe('90ml');
+    const subs = h.summary.rows.filter((r) => r.kind === 'sub');
+    expect(subs.map((s) => `${s.label}: ${s.value}`)).toEqual([
+      'Bottle milk: 60ml', 'Formula: 30ml',
+    ]);
+  });
+
+  it('parts still sum to what was taken when the split rounds', () => {
+    const h = buildHome([ev('bottle', '2026-08-29T11:00',
+      { amountMl: 50, formulaMl: 25, leftoverMl: 20 })], SETTINGS, NOW);
+    // took 55 of 75 → milk rounds to 37, formula absorbs the rest (18)
+    expect(h.summary.rows.find((r) => r.label === 'Milk today').value).toBe('55ml');
+    const subs = h.summary.rows.filter((r) => r.kind === 'sub');
+    expect(subs.map((s) => s.value)).toEqual(['37ml', '18ml']);
+  });
+
+  it('the log entry says what the baby actually took', () => {
+    const h = buildHome([bottle], SETTINGS, NOW);
+    const today = h.summary.days[h.summary.days.length - 1];
+    expect(today.entries[0].details).toBe('took 90ml of 120ml · by partner');
+    // the edit modal still sees the offered amounts plus the leftover
+    expect(today.entries[0].raw).toMatchObject(
+      { amountMl: 80, formulaMl: 40, leftoverMl: 30 });
+  });
+
+  it('a finished bottle reads exactly as before', () => {
+    const h = buildHome([ev('bottle', '2026-08-29T11:00',
+      { amountMl: 80, formulaMl: 40 })], SETTINGS, NOW);
+    const today = h.summary.days[h.summary.days.length - 1];
+    expect(today.entries[0].details).toBe('80ml milk · 40ml formula · by partner');
+    expect(today.entries[0].raw.leftoverMl).toBeNull();
+    expect(h.summary.rows.find((r) => r.label === 'Milk today').value).toBe('120ml');
+  });
+
+  it('a hand-edited leftover beyond the bottle counts as nothing taken', () => {
+    const s = buildStats([ev('bottle', '2026-08-29T11:00',
+      { amountMl: 80, leftoverMl: 500 })], SETTINGS,
+    isoToWallMs('2026-08-29'), isoToWallMs('2026-08-29'));
+    expect(s.days[0].bmMl).toBe(0);
+    expect(s.days[0].totalMl).toBe(0);
+  });
+
+  it('the stats chart counts what was taken too', () => {
+    const s = buildStats([bottle], SETTINGS,
+      isoToWallMs('2026-08-29'), isoToWallMs('2026-08-29'));
+    expect(s.days[0].bmMl).toBe(60);
+    expect(s.days[0].fMl).toBe(30);
+    expect(s.days[0].totalMl).toBe(90);
   });
 });
 

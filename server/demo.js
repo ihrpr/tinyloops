@@ -64,6 +64,7 @@ function generateDemo(nowWall) {
       amountMl: o.amountMl != null ? o.amountMl : null,
       notes: o.notes || '', loggedBy: 'demo@example.com',
       formulaMl: o.formulaMl != null ? o.formulaMl : null,
+      leftoverMl: o.leftoverMl != null ? o.leftoverMl : null,
     });
   };
   add('feed', 0.3, { open: true, side: 'L' }); // running now
@@ -74,7 +75,9 @@ function generateDemo(nowWall) {
       if (t % 6 === 1) add('wet', ago - 0.4);
       if (t % 9 === 4) add('dirty', ago - 0.6, { notes: day === 0 ? 'Mucus' : '' });
     }
-    add('bottle', day * 24 + 9.5, { amountMl: 60, formulaMl: 30 });
+    // every few days the bottle isn't finished
+    add('bottle', day * 24 + 9.5,
+      { amountMl: 60, formulaMl: 30, leftoverMl: day % 4 === 2 ? 30 : null });
     // weaning began ~6 weeks ago: one solids meal a day, a new food every
     // few days, sometimes paired with an old favourite
     if (day < 42) {

@@ -9,14 +9,14 @@
  * Build a context with makeCtx(fake) and pass it where sheets.js wants `c`.
  */
 
-const A = 'ABCDEFGHIJ'; // column letters for the 10-column Log
+const A = 'ABCDEFGHIJK'; // column letters A–K (Log grew leftover_ml in K)
 
 const colIdx = (letter) => A.indexOf(letter);
 
-/** Parse an A1 range like 'Log!A2:J', 'Log!D3:E3', 'Log!A5', 'Settings!A1:A'. */
+/** Parse an A1 range like 'Log!A2:K', 'Log!D3:E3', 'Log!A5', 'Settings!A1:A'. */
 function parseRange(a1) {
   const [tab, rng] = a1.split('!');
-  const m = /^([A-J])(\d+)?(?::([A-J])(\d+)?)?$/.exec(rng);
+  const m = /^([A-K])(\d+)?(?::([A-K])(\d+)?)?$/.exec(rng);
   const c1 = colIdx(m[1]);
   const r1 = m[2] ? Number(m[2]) : 1;
   const c2 = m[3] ? colIdx(m[3]) : c1;
@@ -29,10 +29,11 @@ export class FakeSheets {
   // tracking); [] or rows = it exists with those data rows
   constructor(spreadsheetId, { log = [], settings = [], growth = null } = {}) {
     this.id = spreadsheetId;
-    // rows are arrays of up to 10 cells; row 1 is the header
+    // rows are arrays of up to 11 cells; row 1 is the header. Tests for the
+    // pre-leftover era overwrite tabs.Log[0] with the 10-column header.
     this.tabs = {
       Log: [['id', 'type', 'start_time', 'end_time', 'duration_min',
-        'side', 'amount_ml', 'notes', 'logged_by', 'formula_ml'], ...log],
+        'side', 'amount_ml', 'notes', 'logged_by', 'formula_ml', 'leftover_ml'], ...log],
       Settings: settings.slice(),
     };
     if (growth) {

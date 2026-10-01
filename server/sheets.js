@@ -9,8 +9,11 @@
  *
  * All time handling goes through server/time.js (serials in, serials out —
  * never date strings). The spreadsheet is a shared, user-visible contract:
- * other clients may read and write the same tabs, so the row format must
- * never change shape.
+ * other clients may read and write the same tabs, so existing columns never
+ * change meaning or order. Growing the row is allowed only append-only and
+ * header-gated: leftover_ml (column K) postdates launch, so reads trust it
+ * only under our K1 header and writes heal that header first — see
+ * ensureLeftoverColumn.
  */
 
 import { accessToken, NeedsSignIn } from './auth.js';
@@ -27,7 +30,7 @@ const enc = (id) => encodeURIComponent(id);
 
 export const HEADERS = [
   'id', 'type', 'start_time', 'end_time', 'duration_min',
-  'side', 'amount_ml', 'notes', 'logged_by', 'formula_ml',
+  'side', 'amount_ml', 'notes', 'logged_by', 'formula_ml', 'leftover_ml',
 ];
 export const GROWTH_HEADERS = [
   'id', 'date', 'weight_kg', 'height_cm', 'notes', 'logged_by',
@@ -125,7 +128,7 @@ const numOrNull = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-function rowToEvent(row) {
+function rowToEvent(row, hasLeftover = false) {
   return {
     id: String(row[0] ?? ''),
     type: String(row[1] ?? ''),
@@ -137,6 +140,9 @@ function rowToEvent(row) {
     notes: String(row[7] ?? ''),
     loggedBy: String(row[8] ?? ''),
     formulaMl: numOrNull(row[9]),
+    // column K is read only on sheets carrying our header there — a column
+    // a family added themselves must never be mistaken for leftovers
+    leftoverMl: hasLeftover ? numOrNull(row[10]) : null,
   };
 }
 
@@ -151,14 +157,18 @@ function rowToEvent(row) {
  * and keep the full read for stats only.
  */
 export async function fetchState(c, spreadsheetId) {
-  const ranges = ['Log!A2:J', 'Settings!A1:B']
+  const ranges = ['Log!A1:K', 'Settings!A1:B']
     .map((r) => 'ranges=' + encodeURIComponent(r)).join('&');
   const res = await gapiFetch(c,
     `${API}/${enc(spreadsheetId)}/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE`);
   const [logRange, settingsRange] = res.valueRanges;
 
-  const events = (logRange.values || [])
-    .map((row) => rowToEvent(row))
+  // the read starts at the header row: column K (leftover_ml) postdates
+  // launch, so whether it is ours is checked per sheet, never assumed
+  const logRows = logRange.values || [];
+  const hasLeftover = ((logRows[0] || [])[10]) === 'leftover_ml';
+  const events = logRows.slice(1)
+    .map((row) => rowToEvent(row, hasLeftover))
     .filter((e) => e.id);
   events.sort((a, b) => (b.startWall || 0) - (a.startWall || 0));
   return { events, settings: parseSettings(settingsRange) };
@@ -313,10 +323,41 @@ async function getEvent(c, spreadsheetId, id) {
 }
 
 /**
- * p: {type, startWall, durationMin?, side?, amountMl?, formulaMl?, notes?}
- * durationMin given → closed event. Returns the new event's id.
+ * Column K (leftover_ml) was added after launch, so older sheets lack its
+ * header. Reads treat a missing or foreign K1 as "no leftovers" (see
+ * fetchState), so the header must exist BEFORE the first leftover value
+ * lands — this heals it, mirroring ensureGrowthTab: a crash after the
+ * header write is repaired by simply running again, and a column K the
+ * family uses for their own content is refused, never overwritten. Called
+ * only when a leftover is actually being written, so every other write
+ * costs older sheets nothing.
+ */
+async function ensureLeftoverColumn(c, spreadsheetId) {
+  const res = await gapiFetch(c,
+    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent('Log!K1')}`);
+  const k1 = (((res.values || [])[0] || [])[0]) ?? '';
+  if (k1 === 'leftover_ml') return;
+  if (k1 !== '') {
+    throw new SheetError('This spreadsheet already uses column K of the Log tab for its ' +
+      'own content — move that column so bottle leftovers can be stored there.');
+  }
+  await gapiFetch(c,
+    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent('Log!K1')}` +
+    '?valueInputOption=RAW',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ values: [['leftover_ml']] }),
+      errors: { 400: "Couldn't add the leftover column — the Log tab seems to have no column K." },
+    });
+}
+
+/**
+ * p: {type, startWall, durationMin?, side?, amountMl?, formulaMl?,
+ * leftoverMl?, notes?} — durationMin given → closed event. Returns the new
+ * event's id.
  */
 export async function addEvent(c, spreadsheetId, p, userEmail) {
+  if (Number.isFinite(p.leftoverMl)) await ensureLeftoverColumn(c, spreadsheetId);
   const hasDur = Number.isFinite(p.durationMin);
   const id = crypto.randomUUID();
   const row = [
@@ -330,9 +371,10 @@ export async function addEvent(c, spreadsheetId, p, userEmail) {
     p.notes || '',
     userEmail || '',
     blankOrNum(p.formulaMl),
+    blankOrNum(p.leftoverMl),
   ];
   await gapiFetch(c,
-    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent('Log!A2:J')}:append` +
+    `${API}/${enc(spreadsheetId)}/values/${encodeURIComponent('Log!A2:K')}:append` +
     '?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
     { method: 'POST', body: JSON.stringify({ values: [row] }) });
   return id;
@@ -350,9 +392,11 @@ export async function stopEvent(c, spreadsheetId, id, endWall) {
     { method: 'PUT', body: JSON.stringify({ values: [[wallMsToSerial(endWall), durationMin]] }) }));
 }
 
-/** p: {id, type, startWall, durationMin?, side?, amountMl?, formulaMl?, notes?} */
+/** p: {id, type, startWall, durationMin?, side?, amountMl?, formulaMl?,
+ *  leftoverMl?, notes?} */
 export async function updateEvent(c, spreadsheetId, p) {
   if (!Number.isFinite(p.startWall)) throw new SheetError('Please set a valid start time.');
+  if (Number.isFinite(p.leftoverMl)) await ensureLeftoverColumn(c, spreadsheetId);
   const hasDur = Number.isFinite(p.durationMin);
   await withVerifiedRow(c, spreadsheetId, p.id, (row) =>
     gapiFetch(c, `${API}/${enc(spreadsheetId)}/values:batchUpdate`, {
@@ -372,7 +416,10 @@ export async function updateEvent(c, spreadsheetId, p) {
               p.notes || '',
             ]],
           },
-          { range: `Log!J${row}`, values: [[blankOrNum(p.formulaMl)]] },
+          {
+            range: `Log!J${row}:K${row}`,
+            values: [[blankOrNum(p.formulaMl), blankOrNum(p.leftoverMl)]],
+          },
         ],
       }),
     }));

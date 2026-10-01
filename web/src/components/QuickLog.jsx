@@ -24,6 +24,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
   const [allFoods, setAllFoods] = useState(false);
   const [bottleBm, setBottleBm] = useState('');
   const [bottleF, setBottleF] = useState('');
+  const [bottleLeft, setBottleLeft] = useState('');
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [earlier, setEarlier] = useState(false);
@@ -71,7 +72,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
     setSide(''); setSideTouched(false); setEaten('');
     setSleepKind(''); setSleepKindTouched(false); setMood('');
     setFoods(new Set()); setAllFoods(false);
-    setBottleBm(''); setBottleF(''); setAmount(''); setNotes('');
+    setBottleBm(''); setBottleF(''); setBottleLeft(''); setAmount(''); setNotes('');
     setEarlier(false); setStartInput(''); setDurInput('');
   }
 
@@ -88,7 +89,11 @@ export function QuickLog({ home, run, onError, onLogged }) {
       // chips + anything typed → the same comma-separated food string
       p.notes = [...foods, notes.trim()].filter(Boolean).join(', ');
     }
-    if (type === 'bottle') { p.amountMl = numOrNull(bottleBm); p.formulaMl = numOrNull(bottleF); }
+    if (type === 'bottle') {
+      p.amountMl = numOrNull(bottleBm);
+      p.formulaMl = numOrNull(bottleF);
+      p.leftoverMl = numOrNull(bottleLeft);
+    }
     if (type === 'pump') p.amountMl = numOrNull(amount);
     if (type === 'med' && !p.notes) {
       return onError('Which medicine? Tap a recent one or type it, e.g. Calpol 2.5 ml.');
@@ -171,6 +176,9 @@ export function QuickLog({ home, run, onError, onLogged }) {
           <label className="f">Formula (ml)
             <input type="number" inputMode="numeric" min="0" value={bottleF}
               onChange={(e) => setBottleF(e.target.value)} /></label>
+          <label className="f">Left in the bottle (ml) — if not finished
+            <input type="number" inputMode="numeric" min="0" value={bottleLeft}
+              onChange={(e) => setBottleLeft(e.target.value)} /></label>
         </div>
       )}
 

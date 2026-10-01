@@ -179,6 +179,66 @@ describe('fetchState', () => {
   });
 });
 
+describe('leftover column (K) — added after launch, header-gated', () => {
+  const OLD_HEADER = ['id', 'type', 'start_time', 'end_time', 'duration_min',
+    'side', 'amount_ml', 'notes', 'logged_by', 'formula_ml'];
+  const bottle = { type: 'bottle', startWall: wall('2026-08-29T15:00'),
+    amountMl: 80, formulaMl: 40, leftoverMl: 30 };
+
+  it('writes the leftover into K on a current sheet', async () => {
+    const fake = new FakeSheets('s');
+    await addEvent(makeCtx(fake), 's', bottle, 'me@x');
+    expect(fake.logRows()[0][10]).toBe(30);
+    // the header was already ours — no healing write happened
+    expect(fake.requests.filter((r) => r.op === 'put')).toHaveLength(0);
+  });
+
+  it('heals the missing K1 header on an older sheet before the first leftover', async () => {
+    const fake = new FakeSheets('s');
+    fake.tabs.Log[0] = OLD_HEADER.slice();
+    await addEvent(makeCtx(fake), 's', bottle, 'me@x');
+    expect(fake.tabs.Log[0][10]).toBe('leftover_ml');
+    expect(fake.logRows()[0][10]).toBe(30);
+  });
+
+  it('costs older sheets nothing until a leftover is actually logged', async () => {
+    const fake = new FakeSheets('s');
+    fake.tabs.Log[0] = OLD_HEADER.slice();
+    await addEvent(makeCtx(fake), 's',
+      { type: 'feed', startWall: wall('2026-08-29T14:00'), side: 'L' }, 'me@x');
+    expect(fake.tabs.Log[0]).toHaveLength(10); // header untouched
+    expect(fake.requests.filter((r) => r.op === 'put')).toHaveLength(0);
+  });
+
+  it("refuses the leftover when the family uses column K themselves", async () => {
+    const fake = new FakeSheets('s');
+    fake.tabs.Log[0] = [...OLD_HEADER, 'our notes'];
+    await expect(addEvent(makeCtx(fake), 's', bottle, 'me@x'))
+      .rejects.toThrow(/column K/);
+    expect(fake.logRows()).toHaveLength(0); // nothing appended
+    expect(fake.tabs.Log[0][10]).toBe('our notes'); // their header untouched
+  });
+
+  it('reads K as leftovers only under our header', async () => {
+    const row = ['C', 'bottle', serial('2026-08-29T15:00'), '', '', '', 80, '', 'p@x', 40, 30];
+    const fake = new FakeSheets('s', { log: [row] });
+    expect((await fetchState(makeCtx(fake), 's')).events[0].leftoverMl).toBe(30);
+    // the same cells under a family's own K header are ignored
+    fake.tabs.Log[0] = [...OLD_HEADER, 'our notes'];
+    expect((await fetchState(makeCtx(fake), 's')).events[0].leftoverMl).toBeNull();
+  });
+
+  it('updateEvent writes J:K — and clears a leftover that was removed', async () => {
+    const row = ['C', 'bottle', serial('2026-08-29T15:00'), '', '', '', 80, '', 'p@x', 40, 30];
+    const fake = new FakeSheets('s', { log: [row] });
+    await updateEvent(makeCtx(fake), 's', { id: 'C', type: 'bottle',
+      startWall: wall('2026-08-29T15:00'), amountMl: 80, formulaMl: 40 });
+    const c = fake.logRows()[0];
+    expect(c[9]).toBe(40);
+    expect(c[10]).toBe(''); // she finished it after all
+  });
+});
+
 describe('gapiFetch — error mapping', () => {
   const ctxWith = (status) => makeCtx(async () =>
     new Response(JSON.stringify({ error: { message: 'internal detail' } }), { status }));
@@ -334,6 +394,7 @@ describe('createTrackerSheet', () => {
     const id = await createTrackerSheet(makeCtx(fake));
     expect(id).toBe('s');
     expect(fake.tabs.Log[0][0]).toBe('id');
+    expect(fake.tabs.Log[0][10]).toBe('leftover_ml'); // new sheets start 11 columns wide
     expect(fake.tabs.Growth[0]).toEqual(['id', 'date', 'weight_kg', 'height_cm', 'notes', 'logged_by']);
     expect(fake.tabs.Settings.map((r) => r[0])).toContain('breastfeed_ml');
     const fmt = fake.requests.find((r) => r.op === 'batchUpdate' &&

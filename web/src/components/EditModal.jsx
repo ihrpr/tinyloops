@@ -11,6 +11,7 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
   const [side, setSide] = useState(raw.side || '');
   const [bottleBm, setBottleBm] = useState(raw.type === 'bottle' && raw.amountMl != null ? raw.amountMl : '');
   const [bottleF, setBottleF] = useState(raw.formulaMl != null ? raw.formulaMl : '');
+  const [bottleLeft, setBottleLeft] = useState(raw.leftoverMl != null ? raw.leftoverMl : '');
   const [amount, setAmount] = useState(raw.type === 'pump' && raw.amountMl != null ? raw.amountMl : '');
   const [start, setStart] = useState(raw.start || '');
   const [dur, setDur] = useState(raw.durationMin != null ? raw.durationMin : '');
@@ -34,8 +35,11 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
     } else if (raw.type === type && raw.durationMin != null) {
       p.durationMin = raw.durationMin; // preserve legacy timed data
     }
-    if (type === 'bottle') { p.amountMl = numOrNull(bottleBm); p.formulaMl = numOrNull(bottleF); }
-    else if (type === 'pump') { p.amountMl = numOrNull(amount); }
+    if (type === 'bottle') {
+      p.amountMl = numOrNull(bottleBm);
+      p.formulaMl = numOrNull(bottleF);
+      p.leftoverMl = numOrNull(bottleLeft);
+    } else if (type === 'pump') { p.amountMl = numOrNull(amount); }
     else if (raw.type === type) { p.amountMl = raw.amountMl; p.formulaMl = raw.formulaMl; }
 
     setBusy(true);
@@ -73,6 +77,9 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
             <label className="f">Formula (ml)
               <input type="number" inputMode="numeric" min="0" value={bottleF}
                 onChange={(e) => setBottleF(e.target.value)} /></label>
+            <label className="f">Left in the bottle (ml) — if not finished
+              <input type="number" inputMode="numeric" min="0" value={bottleLeft}
+                onChange={(e) => setBottleLeft(e.target.value)} /></label>
           </div>
         )}
         {type === 'pump' && (

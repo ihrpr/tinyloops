@@ -127,6 +127,19 @@ function dayShape(events, s, nowWall) {
 // readable contract — 'taste'/'some'/'lots' make sense to a human in a cell).
 export const EATEN = { taste: 'just a taste', some: 'ate some', lots: 'ate lots' };
 
+/** What a bottle actually delivered — leftoverMl is the sheet's leftover_ml
+ *  column. The milk and formula were mixed, so an unfinished bottle's
+ *  leftover comes off both pro-rata; the milk share is rounded and formula
+ *  absorbs the remainder, so the parts always sum to what was taken. A
+ *  hand-edited leftover beyond the bottle clamps to it. */
+function bottleTaken(e) {
+  const offered = (e.amountMl || 0) + (e.formulaMl || 0);
+  const left = Math.min(e.leftoverMl || 0, offered);
+  const taken = offered - left;
+  const milk = offered ? Math.round((e.amountMl || 0) * (taken / offered)) : 0;
+  return { milk, formula: taken - milk, taken, offered, left };
+}
+
 // A medicine entry keeps "name + dose" as one free-text string in the notes
 // column ("Calpol 2.5 ml") — doses come in ml, drops, sachets, so a number
 // column can't hold them, and the sheet cell stays human-readable. NOT
@@ -165,6 +178,7 @@ function rawEvent(e) {
     side: e.side || '',
     amountMl: e.amountMl,
     formulaMl: e.formulaMl,
+    leftoverMl: e.leftoverMl ?? null,
     notes: e.notes || '',
   };
 }
@@ -179,10 +193,15 @@ function eventDetails(e) {
     if (e.side === 'night') parts.push('night');
   } else if (e.type === 'mood') {
     if (MOODS[e.side]) parts.push(`${MOODS[e.side].emoji} ${MOODS[e.side].word}`);
-  } else if (e.side) parts.push(sideName(e.side));
+  } else if (e.side && e.type !== 'bottle') parts.push(sideName(e.side));
   if (e.type === 'bottle') {
-    if (e.amountMl) parts.push(`${e.amountMl}ml milk`);
-    if (e.formulaMl) parts.push(`${e.formulaMl}ml formula`);
+    // an unfinished bottle logs what actually went down, not the recipe
+    const b = bottleTaken(e);
+    if (b.left) parts.push(`took ${b.taken}ml of ${b.offered}ml`);
+    else {
+      if (e.amountMl) parts.push(`${e.amountMl}ml milk`);
+      if (e.formulaMl) parts.push(`${e.formulaMl}ml formula`);
+    }
   } else if (e.amountMl) {
     parts.push(`${e.amountMl}ml`);
   }
@@ -341,8 +360,9 @@ function summaryRows(events, s, en, assumedMl, nowWall, isToday) {
   // is when the baby last ate — breastfeed or bottle, whichever is later.
   const feeds = of('feed');
   const bottles = of('bottle');
-  const bmMl = bottles.reduce((a, e) => a + (e.amountMl || 0), 0);
-  const formulaMl = bottles.reduce((a, e) => a + (e.formulaMl || 0), 0);
+  // unfinished bottles count what was taken, split pro-rata (bottleTaken)
+  const bmMl = bottles.reduce((a, e) => a + bottleTaken(e).milk, 0);
+  const formulaMl = bottles.reduce((a, e) => a + bottleTaken(e).formula, 0);
   const breastfedMl = feeds.length * assumedMl;
   const totalMl = bmMl + formulaMl + breastfedMl;
   const lastAte = isToday ? events.find((e) => e.type === 'feed' || e.type === 'bottle') : null;
@@ -535,8 +555,8 @@ export function buildStats(events, settings, fromWall, toWall) {
     day.bfCount = feeds.length;
     day.feedCount = feeds.length + bottles.length;
     day.bfMl = feeds.length * assumedMl;
-    day.bmMl = bottles.reduce((a, e) => a + (e.amountMl || 0), 0);
-    day.fMl = bottles.reduce((a, e) => a + (e.formulaMl || 0), 0);
+    day.bmMl = bottles.reduce((a, e) => a + bottleTaken(e).milk, 0);
+    day.fMl = bottles.reduce((a, e) => a + bottleTaken(e).formula, 0);
     day.totalMl = day.bfMl + day.bmMl + day.fMl;
     const pumps = started('pump');
     day.pumpCount = pumps.length;
@@ -820,7 +840,7 @@ export function buildExplore(events, settings, nowWall, fromWall, toWall) {
       lastNap: daySegs.length ? nw.endMin + daySegs[daySegs.length - 1].b : null,
       napMin: daySegs.reduce((a, g) => a + (g.b - g.a), 0),
       milkMl: started('feed').length * assumedMl
-        + bottles.reduce((a, e) => a + (e.amountMl || 0) + (e.formulaMl || 0), 0),
+        + bottles.reduce((a, e) => a + bottleTaken(e).taken, 0),
       // minutes after the previous noon, so a post-midnight bedtime still sorts late
       bedMin: nw.startMin - 720 + segs[0].a,
     });
