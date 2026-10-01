@@ -93,6 +93,7 @@ body {
 .icn.t-baby    { background: rgba(207, 131, 64, .16);  color: #b06f31; }
 .icn.t-mood    { background: rgba(184, 134, 63, .16);  color: #a06e2c; }
 .icn.t-solid   { background: rgba(154, 132, 62, .16);  color: #85712c; }
+.icn.t-med     { background: rgba(191, 97, 141, .14);  color: #a84f77; }
 .icn.t-timer   { background: rgba(63, 122, 78, .14);   color: #3f7a4e; }
 .icn.t-chart   { background: rgba(79, 136, 184, .14);  color: #40749e; }
 .icn.t-lock    { background: rgba(121, 128, 110, .16); color: #6b7261; }
@@ -109,6 +110,7 @@ body {
   .icn.t-dirty   { color: #b3937c; }
   .icn.t-baby    { color: #dfa96e; }
   .icn.t-solid   { color: #c9b465; }
+  .icn.t-med     { color: #d692b2; }
   .icn.t-timer   { color: #8ab992; }
   .icn.t-chart   { color: #85b3d6; }
   .icn.t-lock    { color: #a8ae9c; }

@@ -21,6 +21,9 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
 
   async function save() {
     if (!start) return onError('Please set a valid start time.');
+    if (type === 'med' && !notes.trim()) {
+      return onError('Which medicine? Add its name (and dose), e.g. Calpol 2.5 ml.');
+    }
     // side carries the nursing side for feeds, the eaten amount for solids
     // and night-vs-nap for sleeps; the server validates each type's own
     // vocabulary
@@ -85,7 +88,8 @@ export function EditModal({ raw, types, run, onError, onClose, onToast }) {
             <input type="number" inputMode="numeric" min="1" value={dur}
               onChange={(e) => setDur(e.target.value)} /></label>
         )}
-        <label className="f">{type === 'solid' ? 'Food (comma-separate for the foods list)' : 'Notes'}
+        <label className="f">{type === 'solid' ? 'Food (comma-separate for the foods list)'
+          : type === 'med' ? 'Medicine & dose' : 'Notes'}
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
 
         <div className="modal-actions">

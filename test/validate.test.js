@@ -160,4 +160,21 @@ describe('side vocabulary per type', () => {
     expect(eventParams({ type: 'sleep', start: '2026-08-29T12:00', side: 'nap' }).side).toBe('');
     expect(eventParams({ type: 'sleep', start: '2026-08-29T12:00', side: 'L' }).side).toBe('');
   });
+  it('medicines take no side at all', () => {
+    expect(eventParams({ type: 'med', start: '2026-08-29T12:00', side: 'L', notes: 'Calpol 2.5 ml' })
+      .side).toBe('');
+  });
+});
+
+describe('medicine entries', () => {
+  it('accepts a named medicine, name + dose as one text', () => {
+    const p = eventParams({ type: 'med', start: '2026-08-29T12:00', notes: 'Calpol 2.5 ml' });
+    expect(p).toMatchObject({ type: 'med', notes: 'Calpol 2.5 ml', side: '' });
+  });
+  it('rejects a medicine entry with no name', () => {
+    expect(() => eventParams({ type: 'med', start: '2026-08-29T12:00' }))
+      .toThrow(/Which medicine/);
+    expect(() => eventParams({ type: 'med', start: '2026-08-29T12:00', notes: '   ' }))
+      .toThrow(ValidationError);
+  });
 });

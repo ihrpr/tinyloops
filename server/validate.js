@@ -109,7 +109,12 @@ export function eventParams(body) {
   // default costs nothing in the sheet.
   const sides = type === 'solid' ? ['taste', 'some', 'lots']
     : type === 'sleep' ? ['night']
-    : type === 'mood' ? ['good', 'mixed', 'bad'] : ['L', 'R', 'both'];
+    : type === 'mood' ? ['good', 'mixed', 'bad']
+    : type === 'med' ? [] : ['L', 'R', 'both'];
+  // a medicine entry is its name+dose text — without it the row says nothing
+  if (type === 'med' && !String(body.notes || '').trim()) {
+    throw new ValidationError('Which medicine? Add its name (and dose), e.g. Calpol 2.5 ml.');
+  }
   const p = {
     type, startWall,
     side: sides.includes(body.side) ? body.side : '',

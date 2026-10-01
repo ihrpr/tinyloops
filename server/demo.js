@@ -89,6 +89,12 @@ function generateDemo(nowWall) {
     add('pump', day * 24 + 13, { amountMl: Math.max(20, 62 - day * 2) + (day % 3) * 6 });
     add('sleep', day * 24 + 4, { durationMin: 150 });
     add('play', day * 24 + 11, { durationMin: 25 });
+    // daily vitamin D, plus infant paracetamol on the rough teething days
+    add('med', day * 24 + 7.4, { notes: 'Vitamin D 1 drop' });
+    if (day % 5 === 4) {
+      add('med', day * 24 + 9.8, { notes: 'Calpol 2.5 ml' });
+      add('med', day * 24 + 14.6, { notes: 'Calpol 2.5 ml' });
+    }
   }
   // night sleeps anchored to day boundaries (not hours-ago), so the rhythm
   // views show the aligned night bars real families see: ~20:48 → ~06:08,

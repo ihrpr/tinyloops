@@ -90,6 +90,9 @@ export function QuickLog({ home, run, onError, onLogged }) {
     }
     if (type === 'bottle') { p.amountMl = numOrNull(bottleBm); p.formulaMl = numOrNull(bottleF); }
     if (type === 'pump') p.amountMl = numOrNull(amount);
+    if (type === 'med' && !p.notes) {
+      return onError('Which medicine? Tap a recent one or type it, e.g. Calpol 2.5 ml.');
+    }
 
     // an earlier entry without a duration stays open — the timer runs from
     // the given start (forgot to press Start, baby still asleep)
@@ -177,6 +180,24 @@ export function QuickLog({ home, run, onError, onLogged }) {
             onChange={(e) => setAmount(e.target.value)} /></label>
       )}
 
+      {type === 'med' && (home.medChips || []).length > 0 && (
+        /* the next dose is usually a repeat — one tap refills name + dose
+           into the text box below, still editable before logging */
+        <div className="food-chips">
+          {home.medChips.map((m) => {
+            const on = notes.trim().toLowerCase() === m.name.toLowerCase();
+            return (
+              <button key={m.name} type="button"
+                className={'food-chip' + (on ? ' on' : '')}
+                aria-pressed={on}
+                onClick={() => setNotes(on ? '' : m.name)}>
+                {m.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {type === 'solid' && (
         <>
           <div className="food-chips">
@@ -224,7 +245,9 @@ export function QuickLog({ home, run, onError, onLogged }) {
 
       <input type="text" value={notes}
         placeholder={type === 'solid' ? 'Something else? e.g. mango'
-          : type === 'mood' ? 'What made it so? (optional)' : 'Notes (optional)'}
+          : type === 'mood' ? 'What made it so? (optional)'
+          : type === 'med' ? 'Medicine & dose — e.g. Calpol 2.5 ml'
+          : 'Notes (optional)'}
         onChange={(e) => setNotes(e.target.value)} />
       <button id="goBtn" className="primary" disabled={busy} onClick={submit}>
         {busy ? 'Saving…' : goLabel}

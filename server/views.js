@@ -20,6 +20,7 @@ export const TYPES = {
   pump:   { label: 'Pump',              short: 'Pump',    emoji: '🥛', timed: false },
   wet:    { label: 'Wet nappy',         short: 'Wet',     emoji: '💧', timed: false },
   dirty:  { label: 'Dirty nappy',       short: 'Dirty',   emoji: '💩', timed: false },
+  med:    { label: 'Medicine',          short: 'Meds',    emoji: '💊', timed: false },
   mood:   { label: 'Day mood',          short: 'Mood',    emoji: '😊', timed: false },
 };
 
@@ -125,6 +126,29 @@ function dayShape(events, s, nowWall) {
 // For solids the side column stores how much was eaten (a shared sheet is a
 // readable contract — 'taste'/'some'/'lots' make sense to a human in a cell).
 export const EATEN = { taste: 'just a taste', some: 'ate some', lots: 'ate lots' };
+
+// A medicine entry keeps "name + dose" as one free-text string in the notes
+// column ("Calpol 2.5 ml") — doses come in ml, drops, sachets, so a number
+// column can't hold them, and the sheet cell stays human-readable. NOT
+// comma-split like foods: a European dose is written "2,5 ml".
+const medName = (e) => String(e.notes || '').trim();
+
+/** Chips for the quick log: the family's recent medicines, newest first —
+ *  the next dose is usually a repeat of name AND dose, so one tap refills
+ *  both. Deduped case-insensitively, first-typed casing wins. */
+function medChips(events) {
+  const chips = [];
+  const seen = new Set();
+  for (const e of events) { // newest first
+    if (e.type !== 'med') continue;
+    const name = medName(e).slice(0, 60);
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    chips.push({ name });
+    if (chips.length >= 8) break;
+  }
+  return chips;
+}
 
 // Free-text fields (notes, the email local-part of loggedBy) travel as raw
 // data; the client HTML-escapes at its single render boundary. Escaping here
@@ -276,6 +300,7 @@ export function buildHome(events, settings, nowWall) {
     },
     sideHint,
     solidFoods: en.has('solid') ? foodChips(events) : [],
+    medChips: en.has('med') ? medChips(events) : [],
     open,
     summary: buildSummary(events, settings, nowWall),
   };
@@ -397,6 +422,22 @@ function summaryRows(events, s, en, assumedMl, nowWall, isToday) {
     pushRow('nappies', '💧💩', 'Nappies',
       isToday && lastNappy ? agoDur(lastNappy.startWall, nowWall) : '',
       [(wet || dirty) ? `${wet} wet · ${dirty} dirty` : '']);
+  }
+
+  // medicines given that day; today's ago is the last dose EVER (that's the
+  // "can she have more Calpol yet?" number, even when today has none yet)
+  const meds = of('med');
+  if (en.has('med') || meds.length) {
+    const lastMed = allOf('med')[0];
+    const seen = new Set();
+    const names = meds.map((e) => medName(e)).filter((n) => {
+      if (!n || seen.has(n.toLowerCase())) return false;
+      seen.add(n.toLowerCase());
+      return true;
+    });
+    pushRow('med', '💊', 'Medicine',
+      isToday && lastMed ? agoDur(lastMed.startWall, nowWall) : '',
+      [meds.length ? `${meds.length}×` : '', names.join(', ')]);
   }
 
   // how the day went — newest mood entry of the day wins (events are

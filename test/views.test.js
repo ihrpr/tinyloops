@@ -307,6 +307,64 @@ describe('solids food chips (home payload)', () => {
   });
 });
 
+describe('medicines', () => {
+  const MED_SETTINGS = { ...SETTINGS, enabled_types: SETTINGS.enabled_types + ',med' };
+  const events = newestFirst([
+    ev('med', '2026-08-29T12:00', { notes: 'Calpol 2.5 ml' }),
+    ev('med', '2026-08-29T08:00', { notes: 'calpol 2.5 ml' }), // same med, lowercased
+    ev('med', '2026-08-29T07:30', { notes: 'Vitamin D 1 drop' }),
+    ev('med', '2026-08-27T09:00', { notes: 'Vitamin D 1 drop' }),
+  ]);
+
+  it('sums the day: count, deduped names, last dose ago', () => {
+    const home = buildHome(events, MED_SETTINGS, NOW);
+    const row = home.summary.rows.find((r) => r.label === 'Medicine');
+    expect(row.value).toBe('3× · Calpol 2.5 ml, Vitamin D 1 drop');
+    expect(row.ago).toBe('2h ago'); // 12:00 dose, now 14:00
+    expect(row.k).toBe('med');
+  });
+
+  it('shows the last dose EVER on a day without doses — the next-dose question', () => {
+    const home = buildHome(newestFirst([
+      ev('med', '2026-08-28T22:00', { notes: 'Calpol 2.5 ml' }),
+    ]), MED_SETTINGS, NOW);
+    const row = home.summary.rows.find((r) => r.label === 'Medicine');
+    expect(row.value).toBe(''); // nothing given today…
+    expect(row.ago).toBe('16h ago'); // …but the spacing clock still shows
+  });
+
+  it('keeps past days self-contained: their row has no ago', () => {
+    const home = buildHome(events, MED_SETTINGS, NOW);
+    const yesterday = home.summary.days[home.summary.days.length - 3]; // 27 Aug
+    const row = yesterday.rows.find((r) => r.label === 'Medicine');
+    expect(row.value).toBe('1× · Vitamin D 1 drop');
+    expect(row.ago).toBe('');
+  });
+
+  it('lists the entry under its name + dose text', () => {
+    const home = buildHome(events, MED_SETTINGS, NOW);
+    const today = home.summary.days[home.summary.days.length - 1];
+    const entry = today.entries.find((e) => e.type === 'med');
+    expect(entry.label).toBe('Medicine');
+    expect(entry.details).toContain('Calpol 2.5 ml');
+    expect(entry.dur).toBe(''); // untimed
+  });
+
+  it('chips the recent medicines, newest first, deduped case-insensitively', () => {
+    const home = buildHome(events, MED_SETTINGS, NOW);
+    expect(home.medChips.map((c) => c.name)).toEqual(['Calpol 2.5 ml', 'Vitamin D 1 drop']);
+  });
+
+  it('hides the row and sends no chips when meds are disabled and unused', () => {
+    const home = buildHome(events, SETTINGS, NOW);
+    expect(home.medChips).toEqual([]);
+    // data exists → the row still shows (disabling hides logging, not history)
+    expect(home.summary.rows.find((r) => r.label === 'Medicine')).toBeDefined();
+    const none = buildHome(newestFirst([ev('wet', '2026-08-29T07:00')]), SETTINGS, NOW);
+    expect(none.summary.rows.find((r) => r.label === 'Medicine')).toBeUndefined();
+  });
+});
+
 // buildRhythm draws whatever range the stats date picker holds
 const FROM7 = isoToWallMs('2026-08-23');
 const TO7 = isoToWallMs('2026-08-29');
