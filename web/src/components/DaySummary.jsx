@@ -1,5 +1,5 @@
 import { IconChip } from './icons.jsx';
-import { DayBand, Legend, hasNight } from './charts/Rhythm.jsx';
+import { DayBand, TargetBand, Legend, hasNight } from './charts/Rhythm.jsx';
 
 // The day-summary widget: one day drawn as a 24h line on top, the summary
 // rows below — the SAME layout for every day. Which day shows is owned by
@@ -39,9 +39,17 @@ export function DaySummary({ summary, day, nav, onEditNursing }) {
         </div>
         {day && (
           <>
+            {/* the plan rides just above the real band, same 24h columns —
+                day.plan is the server's "Target: 2 of 4 naps · …" line */}
+            {summary.target && day.plan && (
+              <>
+                <div className="plan-cap">{day.plan}</div>
+                <TargetBand target={summary.target} />
+              </>
+            )}
             <DayBand day={day} nowMin={summary.nowMin} />
             {/* legend stays stable while paging: keyed to the shipped days */}
-            <Legend night={hasNight([...days, day])} />
+            <Legend night={hasNight([...days, day]) || !!summary.target} />
           </>
         )}
       </div>

@@ -8,7 +8,12 @@ import { DEFAULT_SETTINGS } from './sheets.js';
 import { referenceValue } from './growth.js';
 import { dayStart, wallMsToDate, MS_PER_DAY } from './time.js';
 
-export const DEMO_SETTINGS = { ...DEFAULT_SETTINGS };
+export const DEMO_SETTINGS = {
+  ...DEFAULT_SETTINGS,
+  // the demo family keeps a plan, so the target band shows in demo mode
+  target_naps: '09:30-11:00, 14:00-15:30',
+  target_feeds: '01:00, 04:00, 07:00, 10:00, 13:00, 16:00, 19:00, 22:00',
+};
 
 // The sample set is fixed relative to the current day, so regenerating it on
 // every ?demo request wastes CPU (a public, unauthenticated endpoint). Cache

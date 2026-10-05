@@ -365,6 +365,63 @@ describe('medicines', () => {
   });
 });
 
+describe('target day — the plan from settings', () => {
+  const PLAN = { ...SETTINGS,
+    target_naps: '08:30-10:00, 11:45-13:15, 15:00-16:00',
+    target_feeds: '07:00, 10:00, 13:15, 16:00, 19:10, 22:30' };
+  const events = newestFirst([
+    ev('sleep', '2026-08-29T08:40', { durationMin: 70 }),
+    ev('sleep', '2026-08-29T12:00', { durationMin: 60 }),
+    ev('feed', '2026-08-29T07:05', { durationMin: 15, side: 'L' }),
+    ev('bottle', '2026-08-29T10:10', { amountMl: 120 }),
+  ]);
+
+  it('ships the plan once, in band shape, night from the night window', () => {
+    const target = buildHome(events, PLAN, NOW).summary.target;
+    // the 19:30–07:30 night window becomes the night target at the edges …
+    expect(target.spans[0]).toEqual({ a: 0, b: 450, night: true });
+    expect(target.spans[target.spans.length - 1]).toEqual({ a: 1170, b: 1440, night: true });
+    // … with the planned naps between, sorted, as plain spans
+    expect(target.spans.slice(1, -1)).toEqual([
+      { a: 510, b: 600 }, { a: 705, b: 795 }, { a: 900, b: 960 },
+    ]);
+    expect(target.feeds).toEqual([420, 600, 795, 960, 1150, 1350]);
+  });
+
+  it('holds each day against the plan', () => {
+    const h = buildHome(events, PLAN, NOW);
+    const today = h.summary.days[h.summary.days.length - 1];
+    expect(today.plan).toBe('Target: 2 of 3 naps · 2 of 6 feeds');
+  });
+
+  it('pages fetched from /api/days carry the plan line too', () => {
+    const d = buildDay(events, isoToWallMs('2026-08-29'), NOW, PLAN);
+    expect(d.plan).toBe('Target: 2 of 3 naps · 2 of 6 feeds');
+  });
+
+  it('skips junk tokens in a hand-edited cell instead of breaking', () => {
+    const h = buildHome(events, { ...PLAN, target_naps: 'about 9ish, 15:00-16:00' }, NOW);
+    expect(h.summary.target.spans.filter((sp) => !sp.night)).toEqual([{ a: 900, b: 960 }]);
+  });
+
+  it('no plan configured → no target band, no plan lines', () => {
+    const h = buildHome(events, SETTINGS, NOW);
+    expect(h.summary.target).toBeNull();
+    expect(h.summary.days[h.summary.days.length - 1].plan).toBeNull();
+  });
+
+  it('a feeds-only plan skips the naps part', () => {
+    const h = buildHome(events, { ...SETTINGS, target_feeds: '07:00, 19:00' }, NOW);
+    expect(h.summary.days[h.summary.days.length - 1].plan).toBe('Target: 2 of 2 feeds');
+  });
+
+  it('echoes the stored plan strings for the settings form', () => {
+    const s = buildHome(events, PLAN, NOW).settings;
+    expect(s.targetNaps).toBe('08:30-10:00, 11:45-13:15, 15:00-16:00');
+    expect(s.targetFeeds).toBe('07:00, 10:00, 13:15, 16:00, 19:10, 22:30');
+  });
+});
+
 describe('unfinished bottles (leftover_ml column)', () => {
   const bottle = ev('bottle', '2026-08-29T11:00',
     { amountMl: 80, formulaMl: 40, leftoverMl: 30 });

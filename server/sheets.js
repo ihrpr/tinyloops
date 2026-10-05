@@ -42,6 +42,10 @@ export const DEFAULT_SETTINGS = {
   // default to Night when logging, and it bounds the night-stretch stats
   night_start: '19:30',
   night_end: '07:30',
+  // the target-day plan, drawn as a ghost band over the day summary: nap
+  // spans and feed times as readable text; empty = no plan
+  target_naps: '',
+  target_feeds: '',
 };
 
 export const sheetUrl = (spreadsheetId) =>

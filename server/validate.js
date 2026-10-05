@@ -97,6 +97,61 @@ export function profileParams(body, nowWall) {
   return { birthDate, sex };
 }
 
+/**
+ * Validate + canonicalize the target-day plan from the settings form.
+ * Returns { targetNaps, targetFeeds } as stored in the sheet — readable text
+ * ("08:30-10:00, 11:45-13:15" / "07:00, 10:00"), zero-padded and sorted;
+ * '' = no plan. Strict on save (a typo gets a message naming the token) so
+ * the stored strings are always clean; the read side stays lenient.
+ */
+export function targetSchedule(body) {
+  const hm = (t) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t);
+    if (!m) return null;
+    const min = Number(m[1]) * 60 + Number(m[2]);
+    return Number(m[2]) < 60 && min < 1440 ? min : null;
+  };
+  const pad = (min) =>
+    `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  const tokens = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
+
+  const napTokens = tokens(body.targetNaps);
+  if (napTokens.length > 8) {
+    throw new ValidationError("That's a lot of naps — keep the plan to 8 or fewer.");
+  }
+  const naps = napTokens.map((t) => {
+    const m = /^(\S+)\s*[-–]\s*(\S+)$/.exec(t);
+    const a = m ? hm(m[1]) : null;
+    const b = m ? hm(m[2]) : null;
+    if (a == null || b == null || b <= a) {
+      throw new ValidationError(`Couldn't read "${t}" — write naps as start-end, e.g. 08:30-10:00.`);
+    }
+    return [a, b];
+  }).sort((x, y) => x[0] - y[0]);
+  for (let i = 1; i < naps.length; i++) {
+    if (naps[i][0] < naps[i - 1][1]) {
+      throw new ValidationError('Two planned naps overlap — check the times.');
+    }
+  }
+
+  const feedTokens = tokens(body.targetFeeds);
+  if (feedTokens.length > 16) {
+    throw new ValidationError("That's a lot of feeds — keep the plan to 16 or fewer.");
+  }
+  const feeds = feedTokens.map((t) => {
+    const min = hm(t);
+    if (min == null) {
+      throw new ValidationError(`Couldn't read "${t}" — write feed times as HH:MM, e.g. 07:00.`);
+    }
+    return min;
+  }).sort((x, y) => x - y);
+
+  return {
+    targetNaps: naps.map(([a, b]) => `${pad(a)}-${pad(b)}`).join(', '),
+    targetFeeds: feeds.map(pad).join(', '),
+  };
+}
+
 /** Validate an event payload from the client into sheet-layer params. */
 export function eventParams(body) {
   const type = String(body.type || '');

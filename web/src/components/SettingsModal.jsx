@@ -12,6 +12,8 @@ export function SettingsModal({ home, run, onError, onClose }) {
   const [selected, setSelected] = useState(() => new Set(home.settings.enabledTypes));
   const [nightStart, setNightStart] = useState(() => hm(home.settings.nightStartMin ?? 1170));
   const [nightEnd, setNightEnd] = useState(() => hm(home.settings.nightEndMin ?? 450));
+  const [targetNaps, setTargetNaps] = useState(home.settings.targetNaps || '');
+  const [targetFeeds, setTargetFeeds] = useState(home.settings.targetFeeds || '');
   const [busy, setBusy] = useState(false);
 
   function toggle(key) {
@@ -29,7 +31,8 @@ export function SettingsModal({ home, run, onError, onClose }) {
     setBusy(true);
     const resp = await run(() => api('/api/settings', {
       method: 'PUT',
-      body: { breastfeedMl: Number(ml), enabledTypes: [...selected], nightStart, nightEnd },
+      body: { breastfeedMl: Number(ml), enabledTypes: [...selected], nightStart, nightEnd,
+        targetNaps, targetFeeds },
     }), onError);
     setBusy(false);
     if (resp) onClose();
@@ -54,6 +57,16 @@ export function SettingsModal({ home, run, onError, onClose }) {
         </div>
         <p className="muted hint">Sleeps started in this window are logged as
           Night by default; it also frames the night stats.</p>
+        <div className="modal-sub">Target day (optional)</div>
+        <label className="f">Planned naps — start-end, comma-separated
+          <input type="text" value={targetNaps} placeholder="e.g. 08:30-10:00, 11:45-13:15"
+            onChange={(e) => setTargetNaps(e.target.value)} /></label>
+        <label className="f">Planned feeds — times, comma-separated
+          <input type="text" value={targetFeeds} placeholder="e.g. 07:00, 10:00, 13:15, 16:00"
+            onChange={(e) => setTargetFeeds(e.target.value)} /></label>
+        <p className="muted hint">The plan is drawn above the day summary with how the
+          day compares, nap by nap and feed by feed. Night comes from the window
+          above. Leave both empty for no plan.</p>
         <div className="modal-sub">Show in quick log</div>
         <div className="type-grid">
           {home.types.map((t) => (

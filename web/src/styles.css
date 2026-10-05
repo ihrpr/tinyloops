@@ -643,6 +643,10 @@ details.platform[open] summary::after { transform: rotate(225deg); }
   -webkit-appearance: none; appearance: none;
 }
 .day-band { display: block; width: 100%; height: auto; }
+
+/* the target-day plan: a muted caption + slim ghost strip above the band */
+.plan-cap { color: var(--muted); font-size: 11.5px; text-align: center; margin: 2px 0 4px; }
+.target-band { display: block; width: 100%; height: auto; margin-bottom: 2px; }
 .explore-pick { display: flex; align-items: center; gap: 8px; font-size: 13px;
   color: var(--muted); margin-bottom: 4px; }
 .explore-pick select { flex: 0 1 auto; padding: 6px 10px; font-size: 14px; }

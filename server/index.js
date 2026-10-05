@@ -19,7 +19,8 @@ import * as passkeys from './passkeys.js';
 import { buildHome, buildStats, buildDay, buildRhythm, buildExplore, TYPES, MAX_STATS_DAYS } from './views.js';
 import { buildGrowth } from './growth.js';
 import { isoToWallMs, dayStart, MS_PER_DAY } from './time.js';
-import { eventParams, shareEmail, caregiverName, growthParams, profileParams } from './validate.js';
+import { eventParams, shareEmail, caregiverName, growthParams, profileParams,
+  targetSchedule } from './validate.js';
 import { UserFacingError } from './errors.js';
 import { demoEvents, demoGrowth, DEMO_SETTINGS } from './demo.js';
 
@@ -481,11 +482,14 @@ app.put('/api/settings', async (c) => {
   if (!hm.test(nightStart) || !hm.test(nightEnd)) {
     throw new UserFacingError('Please set the night start and end times.');
   }
+  const target = targetSchedule(body); // canonical plan strings ('' = no plan)
   await sheets.setSettings(c, user.sheet_id, [
     ['breastfeed_ml', Math.round(ml)],
     ['enabled_types', Object.keys(TYPES).filter((k) => list.includes(k)).join(',')],
     ['night_start', nightStart],
     ['night_end', nightEnd],
+    ['target_naps', target.targetNaps],
+    ['target_feeds', target.targetFeeds],
   ]);
   return c.json({ home: await freshHome(c) });
 });

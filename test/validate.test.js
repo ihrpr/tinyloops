@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   clampInt, safeText, eventParams, shareEmail, caregiverName, growthParams,
-  profileParams, ValidationError, MAX_ML,
+  profileParams, targetSchedule, ValidationError, MAX_ML,
 } from '../server/validate.js';
 import { isoToWallMs } from '../server/time.js';
 
@@ -163,6 +163,42 @@ describe('side vocabulary per type', () => {
   it('medicines take no side at all', () => {
     expect(eventParams({ type: 'med', start: '2026-08-29T12:00', side: 'L', notes: 'Calpol 2.5 ml' })
       .side).toBe('');
+  });
+});
+
+describe('targetSchedule — the target-day plan', () => {
+  it('canonicalizes: zero-pads, sorts, tidies spacing', () => {
+    expect(targetSchedule({
+      targetNaps: '14:00-15:30,8:30 - 10:00',
+      targetFeeds: '16:00, 7:00,  10:00',
+    })).toEqual({
+      targetNaps: '08:30-10:00, 14:00-15:30',
+      targetFeeds: '07:00, 10:00, 16:00',
+    });
+  });
+  it('empty input means no plan', () => {
+    expect(targetSchedule({})).toEqual({ targetNaps: '', targetFeeds: '' });
+    expect(targetSchedule({ targetNaps: '  ', targetFeeds: '' }))
+      .toEqual({ targetNaps: '', targetFeeds: '' });
+  });
+  it('accepts an en-dash between nap times', () => {
+    expect(targetSchedule({ targetNaps: '08:30–10:00' }).targetNaps).toBe('08:30-10:00');
+  });
+  it('names the token it cannot read', () => {
+    expect(() => targetSchedule({ targetNaps: '8h30-10:00' })).toThrow(/"8h30-10:00"/);
+    expect(() => targetSchedule({ targetFeeds: '25:00' })).toThrow(/"25:00"/);
+    expect(() => targetSchedule({ targetFeeds: 'after lunch' })).toThrow(ValidationError);
+  });
+  it('rejects a backwards or overlapping nap', () => {
+    expect(() => targetSchedule({ targetNaps: '10:00-08:30' })).toThrow(ValidationError);
+    expect(() => targetSchedule({ targetNaps: '08:30-10:00, 09:45-11:00' }))
+      .toThrow(/overlap/);
+  });
+  it('caps runaway plans', () => {
+    const naps = Array.from({ length: 9 }, (_, i) => `0${i}:00-0${i}:30`).join(', ');
+    expect(() => targetSchedule({ targetNaps: naps })).toThrow(/8 or fewer/);
+    const feeds = Array.from({ length: 17 }, (_, i) => `${String(i).padStart(2, '0')}:00`).join(', ');
+    expect(() => targetSchedule({ targetFeeds: feeds })).toThrow(/16 or fewer/);
   });
 });
 

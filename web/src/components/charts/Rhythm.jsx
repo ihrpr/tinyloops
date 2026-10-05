@@ -6,6 +6,8 @@
 // drawing (hand-rolled SVG: neither view is a chart Recharts can express).
 
 const MIN_DAY = 1440;
+// axis ticks every 3h — 6h steps proved too coarse to place a nap against
+const TICK_HOURS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
 
 function fmtHm(min) {
   const m = min % MIN_DAY;
@@ -40,6 +42,39 @@ export const hasNight = (days) =>
 
 // ---- one day on a 24h line (the home summary widget) ----
 
+/** The family's planned day as a slim ghost strip: same 24h geometry as
+ *  DayBand (rendered directly below it), so planned naps and feeds line up
+ *  with the real ones. No axis text or now line — the band below carries
+ *  those for both. */
+export function TargetBand({ target }) {
+  const W = 380, H = 12, y = 2, x0 = 10, x1 = W - 10, Ht = 16;
+  const X = (min) => x0 + (min / MIN_DAY) * (x1 - x0);
+  const naps = target.spans.filter((sp) => !sp.night).length;
+  return (
+    <svg className="target-band" viewBox={`0 0 ${W} ${Ht}`} role="img"
+      aria-label={`The plan: ${naps} naps and ${target.feeds.length} feeds on the same 24-hour line`}>
+      {TICK_HOURS.map((h) => (
+        <line key={h} x1={X(h * 60)} y1={0} x2={X(h * 60)} y2={Ht}
+          stroke="var(--line)" strokeWidth="1" />
+      ))}
+      <rect x={x0} y={y} width={x1 - x0} height={H} rx={4} fill="var(--chip)" />
+      {target.spans.map((sp, i) => (
+        <rect key={i} x={X(sp.a)} y={y + 1.5}
+          width={Math.max(X(sp.b) - X(sp.a), 3)} height={H - 3}
+          rx={2.5} fill={spanFill(sp)} opacity=".5">
+          <title>{`Planned ${sp.night ? 'night' : 'nap'} ${fmtHm(sp.a)}–${fmtHm(sp.b)}`}</title>
+        </rect>
+      ))}
+      {target.feeds.map((m, i) => (
+        <circle key={i} cx={X(m)} cy={y + H / 2} r="3.4" fill="var(--warm)"
+          opacity=".55" stroke="var(--card)" strokeWidth="1.2">
+          <title>{`Planned feed ${fmtHm(m)}`}</title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
 export function DayBand({ day, nowMin }) {
   const W = 380, H = 26, y = 8, x0 = 10, x1 = W - 10, Ht = 58;
   const X = (min) => x0 + (min / MIN_DAY) * (x1 - x0);
@@ -49,13 +84,14 @@ export function DayBand({ day, nowMin }) {
   return (
     <svg className="day-band" viewBox={`0 0 ${W} ${Ht}`} role="img"
       aria-label={`${day.name}: ${text}`}>
-      {[0, 6, 12, 18, 24].map((h) => (
+      {TICK_HOURS.map((h) => (
         <g key={h}>
           <line x1={X(h * 60)} y1={y - 4} x2={X(h * 60)} y2={y + H + 6}
             stroke="var(--line)" strokeWidth="1" />
-          <text x={X(h * 60)} y={Ht - 4} fontSize="10.5" fill="var(--muted)"
+          {/* bare hours: nine HH:00 labels collide at phone width */}
+          <text x={X(h * 60)} y={Ht - 4} fontSize="10" fill="var(--muted)"
             textAnchor={h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}>
-            {h === 24 ? '24:00' : `${h}:00`}
+            {h}
           </text>
         </g>
       ))}
@@ -101,7 +137,7 @@ function WeekBands({ days, nowMin, labelStep = 1 }) {
   return (
     <svg className="rhythm-week" viewBox={`0 0 ${W} ${H}`} role="img"
       aria-label={`Sleeps and feeds, one row per day, ${nDays} days`}>
-      {[0, 6, 12, 18, 24].map((h) => (
+      {TICK_HOURS.map((h) => (
         <g key={h}>
           <line x1={X(h * 60)} y1={14} x2={X(h * 60)} y2={H - 8}
             stroke="var(--line)" strokeWidth="1" />

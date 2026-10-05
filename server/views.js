@@ -123,6 +123,55 @@ function dayShape(events, s, nowWall) {
   };
 }
 
+/**
+ * The family's target day, from the plan stored in Settings: planned naps
+ * ("08:30-10:00, 11:45-13:15"), planned feed times ("07:00, 10:00, …") and
+ * the existing night window as the night target. Same {spans, feeds} shape
+ * the bands draw, so the plan renders with the day-band code. Null when no
+ * plan is set. The cells are hand-editable text, so parsing is lenient:
+ * junk tokens drop out rather than break the band.
+ */
+export function targetDay(settings) {
+  const naps = [];
+  for (const t of String(settings.target_naps || '').split(',')) {
+    const m = /^\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})\s*$/.exec(t);
+    if (!m) continue;
+    const a = parseHm(m[1], null);
+    const b = parseHm(m[2], null);
+    if (a != null && b != null && b > a) naps.push({ a, b });
+    if (naps.length >= 8) break;
+  }
+  const feeds = [];
+  for (const t of String(settings.target_feeds || '').split(',')) {
+    const min = parseHm(t.trim(), null);
+    if (min != null) feeds.push(min);
+    if (feeds.length >= 16) break;
+  }
+  if (!naps.length && !feeds.length) return null;
+  const nw = nightWindow(settings);
+  const night = nw.startMin > nw.endMin // the usual: night crosses midnight
+    ? [{ a: 0, b: nw.endMin, night: true }, { a: nw.startMin, b: 1440, night: true }]
+    : [{ a: nw.startMin, b: nw.endMin, night: true }];
+  return {
+    spans: [...night, ...naps].sort((x, y) => x.a - y.a),
+    feeds: feeds.sort((x, y) => x - y),
+    napCount: naps.length,
+    feedCount: feeds.length,
+  };
+}
+
+/** 'Target: 2 of 4 naps · 5 of 7 feeds' — one day held against the plan.
+ *  Counts come from the drawn shape, so an open nap counts the moment it
+ *  starts, exactly like the band shows it. */
+function planLine(shape, target) {
+  const parts = [];
+  if (target.napCount) {
+    parts.push(`${shape.spans.filter((sp) => !sp.night).length} of ${target.napCount} naps`);
+  }
+  if (target.feedCount) parts.push(`${shape.feeds.length} of ${target.feedCount} feeds`);
+  return 'Target: ' + parts.join(' · ');
+}
+
 // For solids the side column stores how much was eaten (a shared sheet is a
 // readable contract — 'taste'/'some'/'lots' make sense to a human in a cell).
 export const EATEN = { taste: 'just a taste', some: 'ate some', lots: 'ate lots' };
@@ -250,16 +299,18 @@ function dayEntries(events, s, nowWall) {
  * is pure link-following. `prev` stops at the first day with data, `next`
  * at today; the client never does date arithmetic.
  */
-function dayPayload(events, s, { en, assumedMl, nowWall, today, firstDay }) {
+function dayPayload(events, s, { en, assumedMl, nowWall, today, firstDay, target }) {
   const isToday = s === today;
+  const shape = dayShape(events, s, nowWall);
   return {
     date: wallMsToDate(s),
     name: fmtDay(s, nowWall),
     today: isToday,
-    ...dayShape(events, s, nowWall),
+    ...shape,
     mood: dayMood(events, s),
     rows: summaryRows(events, s, en, assumedMl, nowWall, isToday),
     entries: dayEntries(events, s, nowWall),
+    plan: target ? planLine(shape, target) : null,
     prev: s > firstDay ? wallMsToDate(s - MS_PER_DAY) : null,
     next: s < today ? wallMsToDate(s + MS_PER_DAY) : null,
   };
@@ -316,6 +367,9 @@ export function buildHome(events, settings, nowWall) {
       // minutes-of-day; the client preselects Night for sleeps started inside
       nightStartMin: nightWindow(settings).startMin,
       nightEndMin: nightWindow(settings).endMin,
+      // the stored plan strings, echoed for the settings form
+      targetNaps: String(settings.target_naps || ''),
+      targetFeeds: String(settings.target_feeds || ''),
     },
     sideHint,
     solidFoods: en.has('solid') ? foodChips(events) : [],
@@ -503,7 +557,8 @@ function buildSummary(events, settings, nowWall) {
   // minus the now-statuses); today's rows are the top-level `rows` so they
   // aren't shipped twice.
   const firstDay = firstDayOf(events, dayStartMs);
-  const ctx = { en, assumedMl, nowWall, today: dayStartMs, firstDay };
+  const target = targetDay(settings);
+  const ctx = { en, assumedMl, nowWall, today: dayStartMs, firstDay, target };
   const days = [];
   for (let s = Math.max(dayStartMs - 6 * MS_PER_DAY, firstDay); s <= dayStartMs; s += MS_PER_DAY) {
     const day = dayPayload(events, s, ctx);
@@ -516,6 +571,8 @@ function buildSummary(events, settings, nowWall) {
     days,
     firstDate: wallMsToDate(firstDay), // the date picker's lower bound
     nowMin: Math.round((nowWall - dayStartMs) / MS_PER_MIN),
+    // the plan is the same every day — shipped once, drawn above each day
+    target: target && { spans: target.spans, feeds: target.feeds },
     rows,
     note: en.has('feed') ? `1 breastfeed ≈ ${assumedMl}ml — tap to change` : null,
   };
@@ -883,5 +940,6 @@ export function buildDay(events, date, nowWall, settings) {
     nowWall,
     today,
     firstDay: firstDayOf(events, today),
+    target: targetDay(settings),
   });
 }
