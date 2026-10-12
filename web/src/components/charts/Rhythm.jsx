@@ -15,8 +15,9 @@ function fmtHm(min) {
 }
 
 // `night`: whether night-marked sleep appears in the accompanying chart —
-// families who never mark nights keep the single Sleep swatch.
-export function Legend({ night }) {
+// families who never mark nights keep the single Sleep swatch. `now` is
+// off for the day summary, whose only line is the scrub marker.
+export function Legend({ night, now = true }) {
   return (
     <div className="rhythm-legend">
       {night ? (
@@ -28,7 +29,7 @@ export function Legend({ night }) {
         <span><i className="sw sleep" />Sleep</span>
       )}
       <span><i className="sw feed" />Feed</span>
-      <span><i className="sw now" />Now</span>
+      {now && <span><i className="sw now" />Now</span>}
     </div>
   );
 }
@@ -75,15 +76,42 @@ export function TargetBand({ target }) {
   );
 }
 
-export function DayBand({ day, nowMin }) {
+export function DayBand({ day, nowMin, scrubMin, scrubText, onScrub }) {
   const W = 380, H = 26, y = 8, x0 = 10, x1 = W - 10, Ht = 58;
   const X = (min) => x0 + (min / MIN_DAY) * (x1 - x0);
   const text = day.spans.length || day.feeds.length
     ? `${day.spans.length} sleeps and ${day.feeds.length} feeds on a 24-hour line`
     : 'nothing logged';
+  // scrubbing is direct manipulation: tap or drag anywhere on the band.
+  // Pointer x → minutes-of-day; the parent owns snapping and state. The
+  // band doubles as the accessible slider (arrow keys step 15 minutes).
+  const minAt = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const vx = ((e.clientX - r.left) / r.width) * W;
+    return Math.max(0, Math.min(MIN_DAY, ((vx - x0) / (x1 - x0)) * MIN_DAY));
+  };
+  const scrubProps = onScrub && {
+    tabIndex: 0,
+    role: 'slider',
+    'aria-label': 'Totals by this time of day — drag along the band',
+    'aria-valuemin': 0,
+    'aria-valuemax': MIN_DAY,
+    'aria-valuenow': scrubMin ?? nowMin,
+    'aria-valuetext': scrubText,
+    onPointerDown: (e) => { e.currentTarget.setPointerCapture(e.pointerId); onScrub(minAt(e)); },
+    onPointerMove: (e) => { if (e.buttons) onScrub(minAt(e)); },
+    onKeyDown: (e) => {
+      const cur = scrubMin ?? nowMin;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); onScrub(cur - 15); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); onScrub(cur + 15); }
+      else if (e.key === 'Home') { e.preventDefault(); onScrub(0); }
+      else if (e.key === 'End') { e.preventDefault(); onScrub(MIN_DAY); }
+    },
+  };
   return (
-    <svg className="day-band" viewBox={`0 0 ${W} ${Ht}`} role="img"
-      aria-label={`${day.name}: ${text}`}>
+    <svg className={'day-band' + (onScrub ? ' scrubbable' : '')}
+      viewBox={`0 0 ${W} ${Ht}`} role="img"
+      aria-label={`${day.name}: ${text}`} {...scrubProps}>
       {TICK_HOURS.map((h) => (
         <g key={h}>
           <line x1={X(h * 60)} y1={y - 4} x2={X(h * 60)} y2={y + H + 6}
@@ -110,10 +138,13 @@ export function DayBand({ day, nowMin }) {
           <title>{`Feed ${fmtHm(m)}`}</title>
         </circle>
       ))}
-      {day.today && (
-        <line x1={X(nowMin)} y1={y - 5} x2={X(nowMin)} y2={y + H + 5}
-          stroke="var(--warm)" strokeWidth="2.5" strokeLinecap="round">
-          <title>{`Now ${fmtHm(nowMin)}`}</title>
+      {/* the scrub marker is the band's only line: it rides at Now until
+          dragged (the readout below names its time) */}
+      {scrubMin != null && (
+        <line x1={X(scrubMin)} y1={y - 5} x2={X(scrubMin)} y2={y + H + 5}
+          stroke="var(--ink)" strokeWidth="1.5" strokeDasharray="3 3"
+          strokeLinecap="round" opacity=".65">
+          <title>{`By ${fmtHm(scrubMin)}`}</title>
         </line>
       )}
     </svg>

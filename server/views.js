@@ -160,6 +160,49 @@ export function targetDay(settings) {
   };
 }
 
+// one readout per 15 minutes: fine enough for "by half past two", coarse
+// enough that a week of days adds ~2KB gzipped to the home payload
+const SCRUB_STEP = 15;
+const hm = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; // 1440 → "24:00"
+
+/**
+ * The scrubber's data: 97 display-ready strings, one per 15-minute step
+ * from 00:00 to 24:00 — what had gone down by that time of this day
+ * ("By 14:30 · ≈420ml · 5 feeds · 3h 10m asleep"). The slider position IS
+ * the index, so dragging is pure lookup on the client: all sums happen
+ * here, once, and paging to another day compares the same clock time.
+ */
+function scrubPoints(events, s, assumedMl, nowWall) {
+  const feeds = events
+    .filter((e) => (e.type === 'feed' || e.type === 'bottle') &&
+      e.startWall != null && e.startWall >= s && e.startWall < s + MS_PER_DAY)
+    .map((e) => ({
+      min: Math.round((e.startWall - s) / MS_PER_MIN),
+      ml: e.type === 'feed' ? assumedMl : bottleTaken(e).taken,
+      est: e.type === 'feed', // breastfeeds make the total an estimate
+    }))
+    .sort((x, y) => x.min - y.min);
+  const segs = sleepSegments(events, s, s + MS_PER_DAY, nowWall);
+
+  const out = [];
+  for (let i = 0; i <= 96; i++) {
+    const m = i * SCRUB_STEP;
+    let ml = 0, n = 0, est = false;
+    for (const f of feeds) {
+      if (f.min > m) break;
+      ml += f.ml; n += 1; est = est || f.est;
+    }
+    const sleepMin = segs.reduce(
+      (a, g) => a + Math.max(0, Math.min(g.b, m) - g.a), 0);
+    const parts = [];
+    if (ml) parts.push(`${est ? '≈' : ''}${ml}ml`);
+    if (n) parts.push(`${n} feed${n === 1 ? '' : 's'}`);
+    if (sleepMin) parts.push(`${fmtMin(sleepMin)} asleep`);
+    out.push(`By ${hm(m)} · ${parts.length ? parts.join(' · ') : 'nothing yet'}`);
+  }
+  return out;
+}
+
 /** 'Target: 2 of 4 naps · 5 of 7 feeds' — one day held against the plan.
  *  Counts come from the drawn shape, so an open nap counts the moment it
  *  starts, exactly like the band shows it. */
@@ -310,6 +353,7 @@ function dayPayload(events, s, { en, assumedMl, nowWall, today, firstDay, target
     mood: dayMood(events, s),
     rows: summaryRows(events, s, en, assumedMl, nowWall, isToday),
     entries: dayEntries(events, s, nowWall),
+    scrub: scrubPoints(events, s, assumedMl, nowWall),
     plan: target ? planLine(shape, target) : null,
     prev: s > firstDay ? wallMsToDate(s - MS_PER_DAY) : null,
     next: s < today ? wallMsToDate(s + MS_PER_DAY) : null,
@@ -571,6 +615,9 @@ function buildSummary(events, settings, nowWall) {
     days,
     firstDate: wallMsToDate(firstDay), // the date picker's lower bound
     nowMin: Math.round((nowWall - dayStartMs) / MS_PER_MIN),
+    // the scrubber's default position (the current 15-min step), so the
+    // client needs no clock arithmetic of its own
+    scrubNow: Math.min(96, Math.round((nowWall - dayStartMs) / MS_PER_MIN / SCRUB_STEP)),
     // the plan is the same every day — shipped once, drawn above each day
     target: target && { spans: target.spans, feeds: target.feeds },
     rows,

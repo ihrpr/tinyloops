@@ -647,6 +647,18 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 /* the target-day plan: a muted caption + slim ghost strip above the band */
 .plan-cap { color: var(--muted); font-size: 11.5px; text-align: center; margin: 2px 0 4px; }
 .target-band { display: block; width: 100%; height: auto; margin-bottom: 2px; }
+
+/* the by-time scrubber: the band itself is draggable (pan-y keeps vertical
+   page scrolling alive on touch); the readout sits beneath it */
+.day-band.scrubbable { touch-action: pan-y; cursor: ew-resize; }
+/* no ring for pointer taps (Chromium draws a default ring on focused svg);
+   keyboard focus keeps a visible one */
+.day-band.scrubbable:focus { outline: none; }
+.day-band.scrubbable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scrub-read {
+  text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
 .explore-pick { display: flex; align-items: center; gap: 8px; font-size: 13px;
   color: var(--muted); margin-bottom: 4px; }
 .explore-pick select { flex: 0 1 auto; padding: 6px 10px; font-size: 14px; }

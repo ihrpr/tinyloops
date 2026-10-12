@@ -365,6 +365,46 @@ describe('medicines', () => {
   });
 });
 
+describe('scrubber — cumulative readouts by time of day', () => {
+  const events = newestFirst([
+    ev('sleep', '2026-08-29T13:30', { open: true }),        // asleep right now
+    ev('sleep', '2026-08-29T08:40', { durationMin: 70 }),
+    ev('bottle', '2026-08-29T10:10', { amountMl: 120 }),
+    ev('feed', '2026-08-29T07:05', { durationMin: 15, side: 'L' }),
+  ]);
+  const scrubOf = (h) => h.summary.days[h.summary.days.length - 1].scrub;
+
+  it('ships 97 ready-made strings (one per 15 min) and the now position', () => {
+    const h = buildHome(events, SETTINGS, NOW);
+    expect(scrubOf(h)).toHaveLength(97);
+    expect(h.summary.scrubNow).toBe(56); // 14:00 / 15min
+  });
+
+  it('accumulates milk, feed count and sleep up to each step', () => {
+    const scrub = scrubOf(buildHome(events, SETTINGS, NOW));
+    expect(scrub[0]).toBe('By 00:00 · nothing yet');
+    // 09:00 — one breastfeed (≈60), 20 minutes into the first nap
+    expect(scrub[36]).toBe('By 09:00 · ≈60ml · 1 feed · 20m asleep');
+    // 10:30 — the bottle landed, the nap finished
+    expect(scrub[42]).toBe('By 10:30 · ≈180ml · 2 feeds · 1h 10m asleep');
+    // 14:00 (= now) — the open sleep counts up to the clock and no further
+    expect(scrub[56]).toBe('By 14:00 · ≈180ml · 2 feeds · 1h 40m asleep');
+    expect(scrub[96]).toBe('By 24:00 · ≈180ml · 2 feeds · 1h 40m asleep');
+  });
+
+  it('bottle-only totals are exact (no ≈) and honor leftovers', () => {
+    const scrub = scrubOf(buildHome([ev('bottle', '2026-08-29T11:00',
+      { amountMl: 80, formulaMl: 40, leftoverMl: 30 })], SETTINGS, NOW));
+    expect(scrub[48]).toBe('By 12:00 · 90ml · 1 feed');
+  });
+
+  it('days fetched from /api/days scrub too', () => {
+    const d = buildDay(events, isoToWallMs('2026-08-29'), NOW, SETTINGS);
+    expect(d.scrub).toHaveLength(97);
+    expect(d.scrub[42]).toBe('By 10:30 · ≈180ml · 2 feeds · 1h 10m asleep');
+  });
+});
+
 describe('target day — the plan from settings', () => {
   const PLAN = { ...SETTINGS,
     target_naps: '08:30-10:00, 11:45-13:15, 15:00-16:00',
