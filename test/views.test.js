@@ -459,6 +459,104 @@ describe('target day — the plan from settings', () => {
     const s = buildHome(events, PLAN, NOW).settings;
     expect(s.targetNaps).toBe('08:30-10:00, 11:45-13:15, 15:00-16:00');
     expect(s.targetFeeds).toBe('07:00, 10:00, 13:15, 16:00, 19:10, 22:30');
+    // and the sizes, which seed the builder's count boxes
+    expect(s.targetNapCount).toBe(3);
+    expect(s.targetFeedCount).toBe(6);
+  });
+
+  it('no plan → zero counts, so the builder falls back to its defaults', () => {
+    const s = buildHome(events, SETTINGS, NOW).settings;
+    expect(s.targetNapCount).toBe(0);
+    expect(s.targetFeedCount).toBe(0);
+  });
+});
+
+describe('up next — the plan suggesting today’s next sleep or feed', () => {
+  const PLAN = { ...SETTINGS,
+    target_naps: '08:30-10:00, 11:45-13:15, 15:00-16:00',
+    target_feeds: '07:00, 10:00, 13:15, 16:00, 19:10, 22:30' };
+  const today = (events, settings = PLAN, now = NOW) =>
+    buildHome(newestFirst(events), settings, now).summary.days.at(-1).upNext;
+  const base = [
+    ev('sleep', '2026-08-29T08:40', { durationMin: 70 }), // wakes 09:50
+    ev('sleep', '2026-08-29T12:00', { durationMin: 60 }), // wakes 13:00
+    ev('feed', '2026-08-29T07:05', { durationMin: 15, side: 'L' }),
+    ev('bottle', '2026-08-29T10:10', { amountMl: 120 }),
+  ];
+
+  it('no plan → no suggestion', () => {
+    expect(today(base, SETTINGS)).toBeNull();
+  });
+
+  it('suggests both the coming feed and the coming sleep, furthest first', () => {
+    // last feed 10:10 + the plan’s gap at that hour (10:00→13:15) = 13:25,
+    // not the plan’s own 13:15 — by 14:00 already due; woke 13:00 + the
+    // plan’s third wake window (13:15→15:00) puts the nap at 14:45. The
+    // list is newest-first, so the later nap rides above the closer feed
+    expect(today(base)).toEqual([
+      { type: 'sleep', label: 'Nap', details: 'up next · in 45m', time: '~14:45' },
+      { type: 'feed', label: 'Feed', details: 'up next · any time now', time: '~13:25' },
+    ]);
+  });
+
+  it('anchors the plan’s wake window to the real last wake-up', () => {
+    const fed = [...base, ev('feed', '2026-08-29T13:10', { durationMin: 10, side: 'R' })];
+    // feeds are now covered until 15:55; the 14:45 nap is the closer one
+    expect(today(fed)).toEqual([
+      { type: 'feed', label: 'Feed', details: 'up next · in 1h 55m', time: '~15:55' },
+      { type: 'sleep', label: 'Nap', details: 'up next · in 45m', time: '~14:45' },
+    ]);
+  });
+
+  it('suggests no sleep while one is running', () => {
+    const asleep = [...base,
+      ev('feed', '2026-08-29T13:10', { durationMin: 10, side: 'R' }),
+      ev('sleep', '2026-08-29T13:40', { open: true })];
+    expect(today(asleep)).toEqual([{ type: 'feed', label: 'Feed',
+      details: 'up next · in 1h 55m', time: '~15:55' }]);
+  });
+
+  it('after the last planned nap, the night is the next sleep', () => {
+    const evening = [...base,
+      ev('sleep', '2026-08-29T15:05', { durationMin: 55 }),
+      ev('feed', '2026-08-29T13:10', { durationMin: 10, side: 'R' }),
+      ev('bottle', '2026-08-29T16:10', { amountMl: 120 }),
+      ev('feed', '2026-08-29T19:15', { durationMin: 10, side: 'L' })];
+    expect(today(evening, PLAN, isoToWallMs('2026-08-29T19:25'))).toEqual([
+      { type: 'feed', label: 'Feed', details: 'up next · in 3h 10m', time: '~22:35' },
+      { type: 'sleep', label: 'Night sleep', details: 'up next · in 5m', time: '~19:30' },
+    ]);
+  });
+
+  it('goes quiet when the plan is spent and the night has begun', () => {
+    const night = [...base,
+      ev('feed', '2026-08-29T13:10', { durationMin: 10 }),
+      ev('feed', '2026-08-29T16:10', { durationMin: 10 }),
+      ev('feed', '2026-08-29T18:00', { durationMin: 10 }),
+      ev('feed', '2026-08-29T19:00', { durationMin: 10 }),
+      ev('sleep', '2026-08-29T19:40', { open: true, side: 'night' })];
+    expect(today(night, PLAN, isoToWallMs('2026-08-29T23:00'))).toBeNull();
+  });
+
+  it('a fresh day suggests the plan’s own first feed and nap', () => {
+    expect(today([ev('wet', '2026-08-28T10:00')], PLAN, isoToWallMs('2026-08-29T06:30')))
+      .toEqual([
+        { type: 'sleep', label: 'Nap', details: 'up next · in 2h', time: '~08:30' },
+        { type: 'feed', label: 'Feed', details: 'up next · in 30m', time: '~07:00' },
+      ]);
+  });
+
+  it('past days carry no suggestion', () => {
+    const d = buildDay(newestFirst(base), isoToWallMs('2026-08-28T00:00'), NOW, PLAN);
+    expect(d.upNext).toBeNull();
+  });
+
+  it('a disabled type is never suggested', () => {
+    const fed = [...base, ev('feed', '2026-08-29T13:10', { durationMin: 10, side: 'R' })];
+    // sleep hidden → only the feed ghost remains
+    const upNext = today(fed, { ...PLAN, enabled_types: 'feed,bottle' });
+    expect(upNext).toHaveLength(1);
+    expect(upNext[0].type).toBe('feed');
   });
 });
 

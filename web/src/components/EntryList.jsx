@@ -7,6 +7,19 @@ export function EntryList({ day, onEdit }) {
   if (!day) return null; // loading an older day — the summary card says so
   return (
     <div id="todayList">
+      {/* the plan's suggestions ride above today's real entries as ghosts,
+          furthest first so the newest-first list keeps reading downward in
+          time — not tappable: they are hints, not rows to edit */}
+      {(day.upNext || []).map((u) => (
+        <div className="evt ghost" key={u.type}>
+          <IconChip k={u.type} />
+          <div className="grow">
+            <div className="e-label">{u.label}</div>
+            <div className="e-sub">{u.details}</div>
+          </div>
+          <div className="e-time"><b>{u.time}</b></div>
+        </div>
+      ))}
       {day.entries.length === 0 && (
         <div className="empty-note">Nothing logged this day.</div>
       )}

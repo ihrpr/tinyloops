@@ -337,12 +337,82 @@ function dayEntries(events, s, nowWall) {
 }
 
 /**
+ * The "up next" ghosts for today's list: the coming feed AND the coming
+ * sleep, suggested from the plan's RHYTHM anchored to the day as it
+ * actually went. Babies rarely follow the clock, so the plan's wake window
+ * is measured from the real last wake-up and the plan's feed gap from the
+ * real last feed — the suggestions drift with the day instead of nagging
+ * about a timetable the morning already broke. Ordered furthest-first:
+ * the list is newest-first, so time keeps decreasing down the page and the
+ * closest suggestion sits right above the latest real entry. Null without
+ * a plan, or when nothing sensible is left to suggest today.
+ */
+function upNext(events, s, en, target, nw, nowWall) {
+  if (!target) return null;
+  const nowMin = Math.round((nowWall - s) / MS_PER_MIN);
+  const cands = []; // on a tie the sort below keeps the feed nearest now
+
+  // feeds: the real last feed + the plan's gap at that point of the day
+  // (the gap after the planned feed nearest to it); quiet once the day has
+  // had as many feeds as the plan
+  const plan = target.feeds;
+  if ((en.has('feed') || en.has('bottle')) && plan.length) {
+    const had = events.filter((e) => (e.type === 'feed' || e.type === 'bottle') &&
+      e.startWall != null && e.startWall >= s && e.startWall <= nowWall);
+    if (!had.length) {
+      cands.push({ type: 'feed', label: 'Feed', min: plan[0] });
+    } else if (had.length < plan.length) {
+      const last = Math.round((Math.max(...had.map((e) => e.startWall)) - s) / MS_PER_MIN);
+      let i = 0;
+      for (let j = 1; j < plan.length; j++) {
+        if (Math.abs(plan[j] - last) < Math.abs(plan[i] - last)) i = j;
+      }
+      const gap = plan[i + 1] != null ? plan[i + 1] - plan[i] : plan[i] - plan[i - 1];
+      cands.push({ type: 'feed', label: 'Feed', min: last + gap });
+    }
+  }
+
+  // sleeps: the real last wake-up + the plan's wake window before the next
+  // unmet nap; nothing while asleep, and once the naps are done (or the
+  // next would land past bedtime) the night itself is the suggestion
+  const sleeps = events.filter((e) => e.type === 'sleep' && e.startWall != null &&
+    e.startWall >= s - MS_PER_DAY && e.startWall <= nowWall);
+  if (en.has('sleep') && !sleeps.some((e) => e.endWall == null)) {
+    const naps = target.spans.filter((sp) => !sp.night);
+    const done = sleeps.filter((e) => e.side !== 'night' && e.startWall >= s).length;
+    // never earlier than the planned morning: a night waking is not a wake-up
+    let wake = nw.endMin;
+    for (const e of sleeps) {
+      if (e.endWall != null && e.endWall >= s && e.endWall <= nowWall) {
+        wake = Math.max(wake, Math.round((e.endWall - s) / MS_PER_MIN));
+      }
+    }
+    const next = done < naps.length
+      ? wake + Math.max(0, naps[done].a - (done ? naps[done - 1].b : nw.endMin))
+      : Infinity;
+    if (next < nw.startMin) cands.push({ type: 'sleep', label: 'Nap', min: next });
+    else cands.push({ type: 'sleep', label: 'Night sleep', min: nw.startMin });
+  }
+
+  const rows = cands
+    .filter((c) => c.min < 1440) // past midnight — tomorrow's business
+    .sort((a, b) => b.min - a.min || (a.type === 'feed' ? 1 : -1))
+    .map((c) => ({
+      type: c.type, label: c.label,
+      details: c.min <= nowMin ? 'up next · any time now'
+        : `up next · in ${fmtMin(c.min - nowMin)}`,
+      time: `~${hm(c.min)}`,
+    }));
+  return rows.length ? rows : null;
+}
+
+/**
  * Everything the client shows for one selected day: the 24h band, the
  * summary rows, the entry list — plus `prev`/`next` date pointers so paging
  * is pure link-following. `prev` stops at the first day with data, `next`
  * at today; the client never does date arithmetic.
  */
-function dayPayload(events, s, { en, assumedMl, nowWall, today, firstDay, target }) {
+function dayPayload(events, s, { en, assumedMl, nowWall, today, firstDay, target, nw }) {
   const isToday = s === today;
   const shape = dayShape(events, s, nowWall);
   return {
@@ -355,6 +425,7 @@ function dayPayload(events, s, { en, assumedMl, nowWall, today, firstDay, target
     entries: dayEntries(events, s, nowWall),
     scrub: scrubPoints(events, s, assumedMl, nowWall),
     plan: target ? planLine(shape, target) : null,
+    upNext: isToday ? upNext(events, s, en, target, nw, nowWall) : null,
     prev: s > firstDay ? wallMsToDate(s - MS_PER_DAY) : null,
     next: s < today ? wallMsToDate(s + MS_PER_DAY) : null,
   };
@@ -402,6 +473,7 @@ export function buildHome(events, settings, nowWall) {
       };
     });
 
+  const plan = targetDay(settings);
   return {
     topDate,
     types,
@@ -411,9 +483,12 @@ export function buildHome(events, settings, nowWall) {
       // minutes-of-day; the client preselects Night for sleeps started inside
       nightStartMin: nightWindow(settings).startMin,
       nightEndMin: nightWindow(settings).endMin,
-      // the stored plan strings, echoed for the settings form
+      // the stored plan strings, echoed for the settings form, and their
+      // sizes — the builder's count boxes start from the current plan
       targetNaps: String(settings.target_naps || ''),
       targetFeeds: String(settings.target_feeds || ''),
+      targetNapCount: plan ? plan.napCount : 0,
+      targetFeedCount: plan ? plan.feedCount : 0,
     },
     sideHint,
     solidFoods: en.has('solid') ? foodChips(events) : [],
@@ -602,7 +677,8 @@ function buildSummary(events, settings, nowWall) {
   // aren't shipped twice.
   const firstDay = firstDayOf(events, dayStartMs);
   const target = targetDay(settings);
-  const ctx = { en, assumedMl, nowWall, today: dayStartMs, firstDay, target };
+  const ctx = { en, assumedMl, nowWall, today: dayStartMs, firstDay, target,
+    nw: nightWindow(settings) };
   const days = [];
   for (let s = Math.max(dayStartMs - 6 * MS_PER_DAY, firstDay); s <= dayStartMs; s += MS_PER_DAY) {
     const day = dayPayload(events, s, ctx);
@@ -988,5 +1064,6 @@ export function buildDay(events, date, nowWall, settings) {
     today,
     firstDay: firstDayOf(events, today),
     target: targetDay(settings),
+    nw: nightWindow(settings),
   });
 }

@@ -14,6 +14,12 @@ export function SettingsModal({ home, run, onError, onClose }) {
   const [nightEnd, setNightEnd] = useState(() => hm(home.settings.nightEndMin ?? 450));
   const [targetNaps, setTargetNaps] = useState(home.settings.targetNaps || '');
   const [targetFeeds, setTargetFeeds] = useState(home.settings.targetFeeds || '');
+  // the plan builder: counts default to the current plan's sizes (echoed by
+  // the server) so Build starts from what the family already does
+  const [buildNaps, setBuildNaps] = useState(String(home.settings.targetNapCount || 4));
+  const [buildFeeds, setBuildFeeds] = useState(String(home.settings.targetFeedCount || 8));
+  const [dreamFeed, setDreamFeed] = useState(false);
+  const [building, setBuilding] = useState(false);
   const [busy, setBusy] = useState(false);
 
   function toggle(key) {
@@ -22,6 +28,24 @@ export function SettingsModal({ home, run, onError, onClose }) {
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  }
+
+  // the server spaces the day out and returns the two canonical strings;
+  // this only drops them into the fields below for tweaking, then Save
+  // stores them like hand-typed ones. A read, not a write — so it skips
+  // `run` (the write path) and works in demo mode too.
+  async function buildPlan() {
+    setBuilding(true);
+    try {
+      const q = new URLSearchParams({ naps: buildNaps || '0', feeds: buildFeeds || '0',
+        dreamFeed: dreamFeed ? '1' : '0', nightStart, nightEnd });
+      const resp = await api(`/api/target-plan?${q}`);
+      setTargetNaps(resp.targetNaps);
+      setTargetFeeds(resp.targetFeeds);
+    } catch (e) {
+      onError(e.message); // the server's message names what to fix
+    }
+    setBuilding(false);
   }
 
   async function save() {
@@ -58,6 +82,23 @@ export function SettingsModal({ home, run, onError, onClose }) {
         <p className="muted hint">Sleeps started in this window are logged as
           Night by default; it also frames the night stats.</p>
         <div className="modal-sub">Target day (optional)</div>
+        <div className="plan-build">
+          <label className="f">Naps
+            <input type="number" inputMode="numeric" min="0" max="8" value={buildNaps}
+              onChange={(e) => setBuildNaps(e.target.value)} /></label>
+          <label className="f">Feeds
+            <input type="number" inputMode="numeric" min="0" max="16" value={buildFeeds}
+              onChange={(e) => setBuildFeeds(e.target.value)} /></label>
+          <button className="build-btn" disabled={building} onClick={buildPlan}>
+            {building ? 'Building…' : 'Build'}</button>
+        </div>
+        <label className="toggle">
+          <input type="checkbox" checked={dreamFeed}
+            onChange={(e) => setDreamFeed(e.target.checked)} /> Include a dream feed
+        </label>
+        <p className="muted hint">Build spaces that many naps and feeds evenly through
+          the awake day (between the night times above); a dream feed lands about
+          three hours after bedtime. Tweak the times below before saving.</p>
         <label className="f">Planned naps — start-end, comma-separated
           <input type="text" value={targetNaps} placeholder="e.g. 08:30-10:00, 11:45-13:15"
             onChange={(e) => setTargetNaps(e.target.value)} /></label>

@@ -509,6 +509,11 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 }
 .evt:hover { border-color: var(--accent); box-shadow: var(--shadow-lift); }
 .evt:active { background: var(--chip); }
+/* the up-next suggestion: visibly not a real entry — translucent, dashed,
+   and inert (no pointer affordances) */
+.evt.ghost { opacity: .62; border-style: dashed; box-shadow: none; cursor: default; }
+.evt.ghost:hover { border-color: var(--line); box-shadow: none; }
+.evt.ghost:active { background: var(--card); }
 .evt .icn { width: 34px; height: 34px; }
 .evt .icn svg { width: 19px; height: 19px; }
 .evt .chev { color: var(--muted); font-size: 20px; line-height: 1; opacity: .55; flex: none; }
@@ -665,6 +670,16 @@ details.platform[open] summary::after { transform: rotate(225deg); }
 .night-range { display: flex; gap: 10px; }
 .night-range .f { flex: 1; margin-top: 0; }
 .night-range input { display: block; width: 100%; margin-top: 4px; }
+/* the plan builder: two counts + Build fill the plan fields below */
+.plan-build { display: flex; gap: 10px; align-items: flex-end; }
+.plan-build .f { flex: 1; margin-top: 0; }
+.plan-build input { display: block; width: 100%; margin-top: 4px; }
+.build-btn {
+  flex: 0 0 auto; background: var(--card); border: 1px solid var(--accent);
+  color: var(--accent-strong); font-weight: 700; padding: 10px 18px;
+  border-radius: 12px;
+}
+.build-btn:disabled { opacity: .6; }
 .sum-row.sub { padding: 2px 0 2px 38px; }
 .sum-row.sub .lbl { font-size: 13px; }
 .sum-row.sub .v { font-weight: 500; }

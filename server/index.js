@@ -20,7 +20,7 @@ import { buildHome, buildStats, buildDay, buildRhythm, buildExplore, TYPES, MAX_
 import { buildGrowth } from './growth.js';
 import { isoToWallMs, dayStart, MS_PER_DAY } from './time.js';
 import { eventParams, shareEmail, caregiverName, growthParams, profileParams,
-  targetSchedule } from './validate.js';
+  targetSchedule, buildTargetPlan } from './validate.js';
 import { UserFacingError } from './errors.js';
 import { demoEvents, demoGrowth, DEMO_SETTINGS } from './demo.js';
 
@@ -266,6 +266,9 @@ app.use('/api/*', async (c, next) => {
   if (path === '/api/me') {
     return c.json({ email: 'demo@example.com', hasSheet: true, demo: true });
   }
+  // pure computation (no demo data behind it) — works in the demo settings
+  // form too, so the builder can be tried before signing up
+  if (path === '/api/target-plan') return c.json(buildTargetPlan(c.req.query()));
   // after /api/me: demoEvents caches per day anchored to the FIRST caller's
   // `now`, so a session check without a now param must not warm that cache
   const events = demoEvents(now);
@@ -493,6 +496,12 @@ app.put('/api/settings', async (c) => {
   ]);
   return c.json({ home: await freshHome(c) });
 });
+
+// The target-day builder: counts in, evenly-spaced canonical plan strings
+// out, for the client to drop into the plan fields (tweak, then save as
+// usual). Pure computation — the night window rides in from the form, so
+// there's no sheet round-trip and no requireSheet.
+app.get('/api/target-plan', (c) => c.json(buildTargetPlan(c.req.query())));
 
 // ---------- partner sharing ----------
 

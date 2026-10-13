@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   clampInt, safeText, eventParams, shareEmail, caregiverName, growthParams,
-  profileParams, targetSchedule, ValidationError, MAX_ML,
+  profileParams, targetSchedule, buildTargetPlan, ValidationError, MAX_ML,
 } from '../server/validate.js';
 import { isoToWallMs } from '../server/time.js';
 
@@ -199,6 +199,69 @@ describe('targetSchedule — the target-day plan', () => {
     expect(() => targetSchedule({ targetNaps: naps })).toThrow(/8 or fewer/);
     const feeds = Array.from({ length: 17 }, (_, i) => `${String(i).padStart(2, '0')}:00`).join(', ');
     expect(() => targetSchedule({ targetFeeds: feeds })).toThrow(/16 or fewer/);
+  });
+});
+
+describe('buildTargetPlan — the plan builder', () => {
+  // default night window 19:30 → 07:30: awake day 07:30–19:30 (720 min)
+  it('spaces naps and feeds evenly through the awake day', () => {
+    const p = buildTargetPlan({ naps: '4', feeds: '8' });
+    // 25% of 720 min asleep over 4 naps = 45 min each, equal windows between
+    expect(p.targetNaps).toBe('09:20-10:05, 11:50-12:35, 14:25-15:10, 16:55-17:40');
+    // first feed on waking, last right before the night, even in between
+    expect(p.targetFeeds).toBe('07:30, 08:45, 10:50, 12:50, 14:10, 16:10, 18:15, 19:30');
+  });
+
+  it('uses the night window from the form, unsaved values included', () => {
+    const p = buildTargetPlan({ naps: '0', feeds: '3',
+      nightStart: '19:50', nightEnd: '06:30' });
+    expect(p.targetFeeds).toBe('06:30, 13:10, 19:50');
+  });
+
+  it('a dream feed takes one slot and lands 3h into the night', () => {
+    const p = buildTargetPlan({ naps: '0', feeds: '3', dreamFeed: '1',
+      nightStart: '19:50', nightEnd: '06:30' });
+    expect(p.targetFeeds).toBe('06:30, 19:50, 22:50');
+  });
+
+  it('feed gaps stay even — spacing is measured in awake time', () => {
+    const p = buildTargetPlan({ naps: '4', feeds: '8', dreamFeed: '1' });
+    // naps never squeeze the gaps around them: the day feeds run 1h30–2h15
+    // apart, no long gap with a tiny one next to it, none inside a nap
+    expect(p.targetFeeds)
+      .toBe('07:30, 09:00, 11:15, 13:30, 15:45, 18:00, 19:30, 22:30');
+  });
+
+  it('feeds = naps + 2 lands a feed on every nap wake-up', () => {
+    const p = buildTargetPlan({ naps: '5', feeds: '7',
+      nightStart: '19:50', nightEnd: '06:30' });
+    expect(p.targetNaps)
+      .toBe('08:10-08:50, 10:30-11:10, 12:50-13:30, 15:10-15:50, 17:30-18:10');
+    // wake-up feed, one at the end of each nap, one before the night —
+    // the shape of a real nap timetable, with every gap the same
+    expect(p.targetFeeds).toBe('06:30, 08:50, 11:10, 13:30, 15:50, 18:10, 19:50');
+  });
+
+  it('a single nap gets the full 90 minutes, midday', () => {
+    expect(buildTargetPlan({ naps: '1', feeds: '0' }).targetNaps).toBe('12:45-14:15');
+  });
+
+  it('the result is already canonical — a round-trip changes nothing', () => {
+    const p = buildTargetPlan({ naps: '5', feeds: '7', dreamFeed: '1',
+      nightStart: '19:00', nightEnd: '07:00' });
+    expect(targetSchedule(p)).toEqual(p);
+  });
+
+  it('rejects counts beyond the plan caps, or an all-zero plan', () => {
+    expect(() => buildTargetPlan({ naps: '9', feeds: '8' })).toThrow(/0 to 8/);
+    expect(() => buildTargetPlan({ naps: '4', feeds: '17' })).toThrow(/0 to 16/);
+    expect(() => buildTargetPlan({ naps: '4', feeds: 'lots' })).toThrow(ValidationError);
+    expect(() => buildTargetPlan({ naps: '0', feeds: '0' })).toThrow(/at least one/);
+  });
+
+  it('needs a night that crosses midnight for the awake day to fit in', () => {
+    expect(() => buildTargetPlan({ naps: '2', feeds: '4',
+      nightStart: '06:00', nightEnd: '20:00' })).toThrow(/crosses midnight/);
   });
 });
 
