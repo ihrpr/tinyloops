@@ -7,6 +7,7 @@ import { Connect } from './routes/Connect.jsx';
 import { Tracker } from './routes/Tracker.jsx';
 import { Stats } from './routes/Stats.jsx';
 import { Growth } from './routes/Growth.jsx';
+import { Milestones } from './routes/Milestones.jsx';
 import { Privacy, Terms } from './routes/Legal.jsx';
 import { Join } from './routes/Join.jsx';
 
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Tracker /> },
       { path: 'stats', element: <Stats /> },
       { path: 'growth', element: <Growth /> },
+      { path: 'milestones', element: <Milestones /> },
       { path: 'connect', element: <Connect /> },
       { path: 'signin', element: <SignIn /> },
     ],

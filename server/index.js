@@ -18,6 +18,7 @@ import * as sheets from './sheets.js';
 import * as passkeys from './passkeys.js';
 import { buildHome, buildStats, buildDay, buildRhythm, buildExplore, TYPES, MAX_STATS_DAYS } from './views.js';
 import { buildGrowth } from './growth.js';
+import { buildMilestones } from './milestones.js';
 import { isoToWallMs, dayStart, MS_PER_DAY } from './time.js';
 import { eventParams, shareEmail, caregiverName, growthParams, profileParams,
   targetSchedule, buildTargetPlan } from './validate.js';
@@ -108,6 +109,13 @@ function statsRange(c, now) {
   if ((to - from) / MS_PER_DAY + 1 > MAX_STATS_DAYS) return null;
   return { from, to };
 }
+
+// The milestones payload plus the type list its edit modal needs (the
+// modal can re-type an entry, exactly as on the log view).
+const milestonesView = (events, settings, now) => ({
+  ...buildMilestones(events, settings, now),
+  types: Object.entries(TYPES).map(([key, t]) => ({ key, label: t.label, timed: t.timed })),
+});
 
 // Callers are all behind requireSheet, so user.sheet_id is guaranteed set.
 async function loadState(c) {
@@ -295,6 +303,11 @@ app.use('/api/*', async (c, next) => {
     const g = demoGrowth(now);
     return c.json(buildGrowth(g.measurements, { ...DEMO_SETTINGS, ...g.settings }, now));
   }
+  if (path === '/api/milestones') {
+    // the demo baby's birth date lives with the demo growth data
+    return c.json(milestonesView(events,
+      { ...DEMO_SETTINGS, ...demoGrowth(now).settings }, now));
+  }
   return c.json({ error: 'Not available in demo mode.' }, 404);
 });
 
@@ -404,6 +417,13 @@ app.get('/api/days/:date', async (c) => {
   if (date == null) return c.json({ error: 'Invalid date.' }, 400);
   const state = await loadState(c);
   return c.json(buildDay(state.events, date, nowWall(c), state.settings));
+});
+
+// ---------- milestones (ordinary Log rows, drawn on the baby's age axis) ----------
+
+app.get('/api/milestones', async (c) => {
+  const state = await loadState(c);
+  return c.json(milestonesView(state.events, state.settings, nowWall(c)));
 });
 
 // ---------- growth (measurements + WHO centile charts) ----------

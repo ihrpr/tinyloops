@@ -10,6 +10,7 @@
 
 import { dayStart, wallMsToIso, wallMsToDate, MS_PER_DAY, MS_PER_MIN } from './time.js';
 import { foodTokens, foodChips } from './foods.js';
+import { MILESTONE_CATS, milestoneChips } from './milestones.js';
 
 export const TYPES = {
   feed:   { label: 'Breastfeed',        short: 'Breast',  emoji: '🤱', timed: true },
@@ -22,6 +23,7 @@ export const TYPES = {
   dirty:  { label: 'Dirty nappy',       short: 'Dirty',   emoji: '💩', timed: false },
   med:    { label: 'Medicine',          short: 'Meds',    emoji: '💊', timed: false },
   mood:   { label: 'Day mood',          short: 'Mood',    emoji: '😊', timed: false },
+  milestone: { label: 'Milestone',      short: 'Milestone', emoji: '⭐', timed: false },
 };
 
 // how the day went, entered once towards bedtime; side carries the verdict
@@ -285,6 +287,8 @@ function eventDetails(e) {
     if (e.side === 'night') parts.push('night');
   } else if (e.type === 'mood') {
     if (MOODS[e.side]) parts.push(`${MOODS[e.side].emoji} ${MOODS[e.side].word}`);
+  } else if (e.type === 'milestone') {
+    if (MILESTONE_CATS[e.side]) parts.push(MILESTONE_CATS[e.side].label);
   } else if (e.side && e.type !== 'bottle') parts.push(sideName(e.side));
   if (e.type === 'bottle') {
     // an unfinished bottle logs what actually went down, not the recipe
@@ -493,6 +497,8 @@ export function buildHome(events, settings, nowWall) {
     sideHint,
     solidFoods: en.has('solid') ? foodChips(events) : [],
     medChips: en.has('med') ? medChips(events) : [],
+    milestoneCats: Object.entries(MILESTONE_CATS).map(([key, c]) => ({ key, label: c.short })),
+    milestoneChips: en.has('milestone') ? milestoneChips(events) : [],
     open,
     summary: buildSummary(events, settings, nowWall),
   };
@@ -640,6 +646,10 @@ function summaryRows(events, s, en, assumedMl, nowWall, isToday) {
     pushRow('mood', '😊', 'Day mood', '',
       [`${MOODS[mood.side].emoji} ${MOODS[mood.side].word}`, mood.notes || '']);
   }
+
+  // a milestone reached that day — rare, so the row only shows when it has one
+  const firsts = of('milestone').map((e) => String(e.notes || '').trim()).filter(Boolean);
+  if (firsts.length) pushRow('milestone', '⭐', 'Milestone', '', [firsts.reverse().join(', ')]);
 
   return rows;
 }

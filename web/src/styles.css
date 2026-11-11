@@ -94,6 +94,19 @@ body {
 .icn.t-mood    { background: rgba(184, 134, 63, .16);  color: #a06e2c; }
 .icn.t-solid   { background: rgba(154, 132, 62, .16);  color: #85712c; }
 .icn.t-med     { background: rgba(191, 97, 141, .14);  color: #a84f77; }
+.icn.t-milestone { background: rgba(214, 160, 40, .18); color: #a87a14; }
+.icn.t-m-move    { background: rgba(63, 122, 78, .14);  color: #3f7a4e; }
+.icn.t-m-talk    { background: rgba(79, 136, 184, .14); color: #40749e; }
+.icn.t-m-social  { background: rgba(217, 106, 95, .14); color: #c65548; }
+.icn.t-m-food    { background: rgba(63, 145, 135, .14); color: #337b72; }
+.icn.t-m-body    { background: rgba(122, 114, 201, .14); color: #675eb4; }
+/* the same hues for the milestone ribbon's dots and legend swatches */
+.ms-dot.t-milestone, .ms-swatch.t-milestone { color: #c2901f; }
+.ms-dot.t-m-move,    .ms-swatch.t-m-move    { color: #3f7a4e; }
+.ms-dot.t-m-talk,    .ms-swatch.t-m-talk    { color: #40749e; }
+.ms-dot.t-m-social,  .ms-swatch.t-m-social  { color: #c65548; }
+.ms-dot.t-m-food,    .ms-swatch.t-m-food    { color: #337b72; }
+.ms-dot.t-m-body,    .ms-swatch.t-m-body    { color: #675eb4; }
 .icn.t-timer   { background: rgba(63, 122, 78, .14);   color: #3f7a4e; }
 .icn.t-chart   { background: rgba(79, 136, 184, .14);  color: #40749e; }
 .icn.t-lock    { background: rgba(121, 128, 110, .16); color: #6b7261; }
@@ -111,6 +124,12 @@ body {
   .icn.t-baby    { color: #dfa96e; }
   .icn.t-solid   { color: #c9b465; }
   .icn.t-med     { color: #d692b2; }
+  .icn.t-milestone, .ms-dot.t-milestone, .ms-swatch.t-milestone { color: #e0bb5c; }
+  .icn.t-m-move,    .ms-dot.t-m-move,    .ms-swatch.t-m-move    { color: #8ab992; }
+  .icn.t-m-talk,    .ms-dot.t-m-talk,    .ms-swatch.t-m-talk    { color: #85b3d6; }
+  .icn.t-m-social,  .ms-dot.t-m-social,  .ms-swatch.t-m-social  { color: #e39287; }
+  .icn.t-m-food,    .ms-dot.t-m-food,    .ms-swatch.t-m-food    { color: #7cbcb3; }
+  .icn.t-m-body,    .ms-dot.t-m-body,    .ms-swatch.t-m-body    { color: #a9a3e0; }
   .icn.t-timer   { color: #8ab992; }
   .icn.t-chart   { color: #85b3d6; }
   .icn.t-lock    { color: #a8ae9c; }
@@ -428,7 +447,7 @@ details.platform[open] summary::after { transform: rotate(225deg); }
   display: flex; gap: 6px; margin-bottom: 14px;
   background: var(--chip); padding: 4px; border-radius: 12px;
 }
-.tab { flex: 1; padding: 9px; border-radius: 9px; background: transparent; color: var(--muted); font-family: var(--display); font-weight: 600; font-size: 15px; }
+.tab { flex: 1 1 auto; text-align: center; white-space: nowrap; padding: 9px 6px; border-radius: 9px; background: transparent; color: var(--muted); font-family: var(--display); font-weight: 600; font-size: 15px; }
 .tab.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
 
 /* ---------- open (running) activities ---------- */
@@ -718,13 +737,100 @@ details.platform[open] summary::after { transform: rotate(225deg); }
   padding: 7px 10px; font-size: 12px; max-width: 240px; line-height: 1.45;
 }
 
+/* ---------- milestones ---------- */
+
+.seg.seg-wrap { flex-wrap: wrap; }
+.seg.seg-wrap button { flex: 1 1 30%; padding: 10px 6px; }
+
+.ms-head { display: flex; align-items: center; gap: 12px; }
+.ms-count { font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: -.01em; }
+.ms-hint { margin: 12px 0 0; }
+.ms-hint a { color: var(--accent); }
+
+/* the age ribbon: dots stack upward in rows above the road, ticks sit below */
+.ms-ribbon { padding: 14px 16px 0; }
+.ms-track { position: relative; height: calc(var(--rows) * 17px + 34px); }
+.ms-road {
+  position: absolute; left: 0; right: 0; bottom: 21.5px; height: 3px;
+  border-radius: 2px; background: var(--accent); opacity: .55;
+}
+.ms-tick {
+  position: absolute; bottom: 0; transform: translateX(-50%);
+  font-size: 10.5px; color: var(--muted); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ms-tick::before {
+  content: ''; position: absolute; left: 50%; bottom: 17px;
+  width: 1px; height: 5px; background: var(--line);
+}
+.ms-now {
+  position: absolute; bottom: 14px; transform: translateX(-50%);
+  width: 10px; height: 18px; font-size: 0; /* label is for screen readers */
+  border-radius: 5px; background: var(--warm); border: 2px solid var(--card);
+}
+.ms-dot {
+  position: absolute; bottom: calc(29px + var(--row) * 17px);
+  width: 16px; height: 16px; margin-left: -8px; padding: 0;
+  border-radius: 50%; background: currentColor;
+  border: 2px solid var(--card); box-shadow: 0 0 0 1px rgba(0, 0, 0, .08);
+  transition: transform .15s, opacity .15s;
+}
+/* a 16px dot is a small target — widen the hit area without moving it */
+.ms-dot::after { content: ''; position: absolute; inset: -8px -4px; }
+.ms-dot:hover, .ms-dot.picked { transform: scale(1.35); z-index: 1; }
+.ms-dot.picked { box-shadow: 0 0 0 2px currentColor; }
+.ms-dot.dim { opacity: .2; }
+.ms-caption {
+  margin: 10px 2px 0; font-size: 13px; color: var(--muted); min-height: 19px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.ms-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ms-key {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; min-height: 32px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--card); color: var(--ink); font-size: 12.5px;
+}
+.ms-key b { color: var(--muted); font-weight: 600; }
+.ms-key:hover { border-color: var(--accent); }
+.ms-key.on { background: rgba(63, 122, 78, .12); border-color: var(--accent); font-weight: 600; }
+.ms-swatch { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: none; }
+
+.ms-add { width: 100%; }
+
+/* the timeline: icon chips threaded on a spine, one card per milestone */
+.ms-list { list-style: none; margin: 0; padding: 0; }
+.ms-item { position: relative; display: flex; align-items: flex-start; gap: 10px; padding-bottom: 8px; }
+.ms-item::before {
+  content: ''; position: absolute; left: 19px; top: 44px; bottom: 4px;
+  width: 2px; border-radius: 1px; background: var(--line);
+}
+.ms-item:last-child::before { content: none; }
+.ms-card {
+  flex: 1; min-width: 0; text-align: left;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 10px 13px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.ms-card:hover { border-color: var(--accent); box-shadow: var(--shadow-lift); }
+.ms-item.picked .ms-card { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(63, 122, 78, .22); }
+.ms-title { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+.ms-sub { font-size: 12.5px; color: var(--muted); }
+
+@media (max-width: 379px) {
+  .tab { font-size: 13.5px; padding: 9px 4px; }
+}
+
 /* ---------- desktop ---------- */
 
 @media (min-width: 880px) {
   body { font-size: 15px; }
   .wrap { max-width: 960px; padding-top: 28px; }
   h1 { font-size: 24px; }
-  .tabs { max-width: 320px; }
+  .tabs { max-width: 440px; }
 
   #logView {
     display: grid;
@@ -736,6 +842,7 @@ details.platform[open] summary::after { transform: rotate(225deg); }
   #logView .col-a > .card:first-of-type { margin-top: 0; }
 
   #statsView { max-width: 640px; margin: 0 auto; }
+  #milestonesView { max-width: 640px; margin: 0 auto; }
   .cols { height: 180px; }
 
   #overlay, #settingsOverlay, #shareOverlay { align-items: center; padding: 24px; }

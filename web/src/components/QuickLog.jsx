@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, localNowIso } from '../api.js';
-import { SideSeg, EatenSeg, SleepSeg, MoodSeg } from './SideSeg.jsx';
+import { SideSeg, EatenSeg, SleepSeg, MoodSeg, MilestoneSeg } from './SideSeg.jsx';
 import { IconChip } from './icons.jsx';
 
 const numOrNull = (v) => (v.trim() === '' ? null : Number(v));
@@ -20,6 +20,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
   const [sleepKind, setSleepKind] = useState(''); // '' = nap
   const [sleepKindTouched, setSleepKindTouched] = useState(false);
   const [mood, setMood] = useState('');
+  const [milestoneCat, setMilestoneCat] = useState('');
   const [foods, setFoods] = useState(() => new Set());
   const [allFoods, setAllFoods] = useState(false);
   const [bottleBm, setBottleBm] = useState('');
@@ -70,7 +71,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
 
   function reset() {
     setSide(''); setSideTouched(false); setEaten('');
-    setSleepKind(''); setSleepKindTouched(false); setMood('');
+    setSleepKind(''); setSleepKindTouched(false); setMood(''); setMilestoneCat('');
     setFoods(new Set()); setAllFoods(false);
     setBottleBm(''); setBottleF(''); setBottleLeft(''); setAmount(''); setNotes('');
     setEarlier(false); setStartInput(''); setDurInput('');
@@ -93,6 +94,10 @@ export function QuickLog({ home, run, onError, onLogged }) {
       p.amountMl = numOrNull(bottleBm);
       p.formulaMl = numOrNull(bottleF);
       p.leftoverMl = numOrNull(bottleLeft);
+    }
+    if (type === 'milestone') {
+      if (!p.notes) return onError('What happened? Tap a suggestion or type it, e.g. First smile.');
+      p.side = milestoneCat;
     }
     if (type === 'pump') p.amountMl = numOrNull(amount);
     if (type === 'med' && !p.notes) {
@@ -206,6 +211,29 @@ export function QuickLog({ home, run, onError, onLogged }) {
         </div>
       )}
 
+      {type === 'milestone' && (
+        <>
+          {(home.milestoneChips || []).length > 0 && (
+            /* the classics not logged yet — one tap fills the text and kind */
+            <div className="food-chips">
+              {home.milestoneChips.map((m) => {
+                const on = notes.trim().toLowerCase() === m.name.toLowerCase();
+                return (
+                  <button key={m.name} type="button"
+                    className={'food-chip' + (on ? ' on' : '')}
+                    aria-pressed={on}
+                    onClick={() => { setNotes(on ? '' : m.name); setMilestoneCat(on ? '' : m.cat); }}>
+                    {m.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="side-hint">What kind of milestone? (optional)</div>
+          <MilestoneSeg cats={home.milestoneCats} value={milestoneCat} onChange={setMilestoneCat} />
+        </>
+      )}
+
       {type === 'solid' && (
         <>
           <div className="food-chips">
@@ -255,6 +283,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
         placeholder={type === 'solid' ? 'Something else? e.g. mango'
           : type === 'mood' ? 'What made it so? (optional)'
           : type === 'med' ? 'Medicine & dose — e.g. Calpol 2.5 ml'
+          : type === 'milestone' ? 'What happened? e.g. First smile'
           : 'Notes (optional)'}
         onChange={(e) => setNotes(e.target.value)} />
       <button id="goBtn" className="primary" disabled={busy} onClick={submit}>

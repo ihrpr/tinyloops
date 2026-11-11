@@ -89,7 +89,7 @@ const round = (v, dp) => Math.round(v * 10 ** dp) / 10 ** dp;
 
 /** Whole calendar months between two wall times (how parents count age —
  *  dividing by 30.4375 would show "11 months old" on the first birthday). */
-function calendarMonths(birthWall, wall) {
+export function calendarMonths(birthWall, wall) {
   const b = new Date(dayStart(birthWall));
   const d = new Date(dayStart(wall));
   let m = (d.getUTCFullYear() - b.getUTCFullYear()) * 12
@@ -98,7 +98,7 @@ function calendarMonths(birthWall, wall) {
   return Math.max(0, m);
 }
 
-function fmtAgeAt(birthWall, wall) {
+export function fmtAgeAt(birthWall, wall) {
   const days = Math.round((dayStart(wall) - dayStart(birthWall)) / MS_PER_DAY);
   if (days < 14) return days === 1 ? '1 day' : `${days} days`;
   if (days < 13 * 7) return `${Math.floor(days / 7)} weeks`;

@@ -10,6 +10,7 @@ import { dayStart, wallMsToDate, MS_PER_DAY } from './time.js';
 
 export const DEMO_SETTINGS = {
   ...DEFAULT_SETTINGS,
+  enabled_types: DEFAULT_SETTINGS.enabled_types + ',milestone',
   // the demo family keeps a plan, so the target band shows in demo mode
   target_naps: '09:30-11:00, 14:00-15:30',
   target_feeds: '01:00, 04:00, 07:00, 10:00, 13:00, 16:00, 19:00, 22:00',
@@ -120,6 +121,20 @@ function generateDemo(nowWall) {
         notes: day % 5 === 4 ? 'teething, grumpy afternoon' : '',
       });
     }
+  }
+  // milestones on the demo baby's age axis (born 130 days ago, see demoGrowth)
+  const birth = today - 130 * MS_PER_DAY;
+  const firsts = [
+    [2, 'Came home', ''], [9, 'First bath', 'body'], [31, 'Held head up', 'move'],
+    [43, 'First smile', 'social'], [47, 'Followed a toy with her eyes', 'social'],
+    [62, 'Slept six hours straight', ''], [74, 'Found her hands', 'move'],
+    [86, 'First laugh', 'social'], [88, 'First solid food', 'food'],
+    [101, 'Cooing back at us', 'talk'], [117, 'Rolled over', 'move'],
+    [126, 'Grabbed her feet', 'move'],
+  ];
+  for (const [day, notes, side] of firsts) {
+    const startWall = birth + day * MS_PER_DAY + 10.5 * h;
+    add('milestone', (nowWall - startWall) / h, { side, notes });
   }
   out.sort((a, b) => b.startWall - a.startWall);
   return out;

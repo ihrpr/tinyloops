@@ -37,6 +37,7 @@ export const GROWTH_HEADERS = [
 ];
 export const DEFAULT_SETTINGS = {
   breastfeed_ml: 60,
+  // 'milestone' is opt-in: families add it under Settings → Show in quick log
   enabled_types: 'feed,bottle,solid,sleep,play,pump,wet,dirty,med,mood',
   // the family's night window (HH:MM wall clock): sleeps started inside it
   // default to Night when logging, and it bounds the night-stretch stats
