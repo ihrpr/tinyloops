@@ -122,19 +122,17 @@ function generateDemo(nowWall) {
       });
     }
   }
-  // milestones on the demo baby's age axis (born 130 days ago, see demoGrowth)
+  // the demo baby's milestones (born 130 days ago, see demoGrowth)
   const birth = today - 130 * MS_PER_DAY;
   const firsts = [
-    [2, 'Came home', ''], [9, 'First bath', 'body'], [31, 'Held head up', 'move'],
-    [43, 'First smile', 'social'], [47, 'Followed a toy with her eyes', 'social'],
-    [62, 'Slept six hours straight', ''], [74, 'Found her hands', 'move'],
-    [86, 'First laugh', 'social'], [88, 'First solid food', 'food'],
-    [101, 'Cooing back at us', 'talk'], [117, 'Rolled over', 'move'],
-    [126, 'Grabbed her feet', 'move'],
+    [2, 'Came home'], [9, 'First bath'], [31, 'Held head up'], [43, 'First smile'],
+    [47, 'Followed a toy with her eyes'], [62, 'Slept six hours straight'],
+    [74, 'Found her hands'], [86, 'First laugh'], [88, 'First solid food'],
+    [101, 'Cooing back at us'], [117, 'Rolled over'], [126, 'Grabbed her feet'],
   ];
-  for (const [day, notes, side] of firsts) {
+  for (const [day, notes] of firsts) {
     const startWall = birth + day * MS_PER_DAY + 10.5 * h;
-    add('milestone', (nowWall - startWall) / h, { side, notes });
+    add('milestone', (nowWall - startWall) / h, { notes });
   }
   out.sort((a, b) => b.startWall - a.startWall);
   return out;

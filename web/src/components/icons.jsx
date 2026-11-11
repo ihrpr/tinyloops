@@ -35,14 +35,7 @@ const PATHS = {
   dirty: <path d="M19.5 13.5a7.5 7.5 0 1 1-7.5-7.5 4.7 4.7 0 0 1 4.7 4.7 3 3 0 0 1-3 3 1.9 1.9 0 0 1-1.9-1.9" />,
   med: <><rect x="5.5" y="8.5" width="13" height="7" rx="3.5" transform="rotate(-45 12 12)" /><path d="M9.9 9.9l4.2 4.2" /></>,
   mood: <><circle cx="12" cy="12" r="8.5" /><path d="M9 10.2h.01M15 10.2h.01" strokeWidth="2.6" /><path d="M8.8 14.4q3.2 2.6 6.4 0" /></>,
-  // milestones: the star, plus one icon per category (social and eating
-  // reuse the smile and the bowl)
   milestone: <path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8Z" />,
-  'm-move': <path d="M3.5 19.5h4.5v-4.5h4.5v-4.5H17V6h3.5" />,
-  'm-talk': <path d="M5.5 5h13A2 2 0 0 1 20.5 7v7.5a2 2 0 0 1-2 2H12l-4.5 3.5v-3.5h-2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />,
-  'm-social': <><circle cx="12" cy="12" r="8.5" /><path d="M9 10.2h.01M15 10.2h.01" strokeWidth="2.6" /><path d="M8.8 14.4q3.2 2.6 6.4 0" /></>,
-  'm-food': <><path d="M4.5 12.5h15a7.5 7.5 0 0 1-15 0Z" /><path d="M14.5 12.5l3.3-5.9" /><circle cx="18.7" cy="4.9" r="1.8" /></>,
-  'm-body': <path d="M8 4C5.8 4 4.5 5.7 4.5 8c0 2.3 1 3.6 1.4 5.8.4 2.1.6 6.2 2 6.2 1.7 0 1.2-5 4.1-5s2.4 5 4.1 5c1.4 0 1.6-4.1 2-6.2.4-2.2 1.4-3.5 1.4-5.8 0-2.3-1.3-4-3.5-4-1.7 0-2.5.9-4 .9S9.7 4 8 4Z" />,
   // summary-row extras
   baby: <><circle cx="12" cy="13" r="7.8" /><path d="M9.3 12.2h.01M14.7 12.2h.01" strokeWidth="2.6" /><path d="M9.4 15.6q2.6 2 5.2 0M12 5.2c0-1.6 1-2.2 2.1-2.2" /></>,
   milk: <><path d="M8 3.5h8l-1.3 15.6a2.3 2.3 0 0 1-2.3 2.1h-.8a2.3 2.3 0 0 1-2.3-2.1Z" /><path d="M9 10.5h6" /></>,

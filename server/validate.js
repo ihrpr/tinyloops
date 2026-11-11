@@ -5,7 +5,6 @@
  */
 
 import { TYPES } from './views.js';
-import { MILESTONE_CATS } from './milestones.js';
 import { isoToWallMs } from './time.js';
 import { UserFacingError } from './errors.js';
 
@@ -263,8 +262,7 @@ export function eventParams(body) {
   const sides = type === 'solid' ? ['taste', 'some', 'lots']
     : type === 'sleep' ? ['night']
     : type === 'mood' ? ['good', 'mixed', 'bad']
-    : type === 'milestone' ? Object.keys(MILESTONE_CATS)
-    : type === 'med' || type === 'bottle' ? [] : ['L', 'R', 'both'];
+    : type === 'med' || type === 'bottle' || type === 'milestone' ? [] : ['L', 'R', 'both'];
   // a medicine entry is its name+dose text — without it the row says nothing
   if (type === 'med' && !String(body.notes || '').trim()) {
     throw new ValidationError('Which medicine? Add its name (and dose), e.g. Calpol 2.5 ml.');

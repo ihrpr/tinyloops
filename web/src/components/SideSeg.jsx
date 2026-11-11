@@ -1,9 +1,9 @@
 // Left/Right/Both segmented control. Controlled: value is '' | 'L' | 'R' | 'both'.
 const SIDES = [['L', 'Left'], ['R', 'Right'], ['both', 'Both']];
 
-function Seg({ options, value, onChange, wrap }) {
+function Seg({ options, value, onChange }) {
   return (
-    <div className={'seg' + (wrap ? ' seg-wrap' : '')}>
+    <div className="seg">
       {options.map(([v, label]) => (
         <button
           key={v}
@@ -41,10 +41,4 @@ const MOOD_OPTS = [['good', '😊 Good'], ['mixed', '😐 Mixed'], ['bad', '😞
 
 export function MoodSeg({ value, onChange }) {
   return <Seg options={MOOD_OPTS} value={value} onChange={onChange} />;
-}
-
-// What kind of milestone. Same column once more — the categories come from
-// the server (`cats`: [{key, label}]); none picked = a plain "first".
-export function MilestoneSeg({ cats, value, onChange }) {
-  return <Seg wrap options={(cats || []).map((c) => [c.key, c.label])} value={value} onChange={onChange} />;
 }

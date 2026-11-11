@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { api } from '../api.js';
-import { SideSeg, EatenSeg, SleepSeg, MoodSeg, MilestoneSeg } from './SideSeg.jsx';
+import { SideSeg, EatenSeg, SleepSeg, MoodSeg } from './SideSeg.jsx';
 
 const numOrNull = (v) => (String(v).trim() === '' ? null : Number(v));
 
 // Edit or delete an existing entry. `raw` is the server-provided raw event
 // (unescaped values, set into inputs via value — never innerHTML).
-export function EditModal({ raw, types, milestoneCats, run, onError, onClose, onToast }) {
+export function EditModal({ raw, types, run, onError, onClose, onToast }) {
   const [type, setType] = useState(raw.type);
   const [side, setSide] = useState(raw.side || '');
   const [bottleBm, setBottleBm] = useState(raw.type === 'bottle' && raw.amountMl != null ? raw.amountMl : '');
@@ -31,8 +31,7 @@ export function EditModal({ raw, types, milestoneCats, run, onError, onClose, on
     // side carries the nursing side for feeds, the eaten amount for solids
     // and night-vs-nap for sleeps; the server validates each type's own
     // vocabulary
-    const keepSide = type === 'feed' || type === 'solid' || type === 'sleep' || type === 'mood' ||
-      type === 'milestone';
+    const keepSide = type === 'feed' || type === 'solid' || type === 'sleep' || type === 'mood';
     const p = { id: raw.id, type, start, notes: notes.trim(), side: keepSide ? side : '' };
     if (meta.timed) {
       if (numOrNull(dur) != null) p.durationMin = numOrNull(dur);
@@ -72,9 +71,6 @@ export function EditModal({ raw, types, milestoneCats, run, onError, onClose, on
         {type === 'solid' && <EatenSeg value={side} onChange={setSide} />}
         {type === 'sleep' && <SleepSeg value={side} onChange={setSide} />}
         {type === 'mood' && <MoodSeg value={side} onChange={setSide} />}
-        {type === 'milestone' && (
-          <MilestoneSeg cats={milestoneCats} value={side} onChange={setSide} />
-        )}
 
         {type === 'bottle' && (
           <div>

@@ -110,13 +110,6 @@ function statsRange(c, now) {
   return { from, to };
 }
 
-// The milestones payload plus the type list its edit modal needs (the
-// modal can re-type an entry, exactly as on the log view).
-const milestonesView = (events, settings, now) => ({
-  ...buildMilestones(events, settings, now),
-  types: Object.entries(TYPES).map(([key, t]) => ({ key, label: t.label, timed: t.timed })),
-});
-
 // Callers are all behind requireSheet, so user.sheet_id is guaranteed set.
 async function loadState(c) {
   return sheets.fetchState(c, c.get('user').sheet_id);
@@ -305,7 +298,7 @@ app.use('/api/*', async (c, next) => {
   }
   if (path === '/api/milestones') {
     // the demo baby's birth date lives with the demo growth data
-    return c.json(milestonesView(events,
+    return c.json(buildMilestones(events,
       { ...DEMO_SETTINGS, ...demoGrowth(now).settings }, now));
   }
   return c.json({ error: 'Not available in demo mode.' }, 404);
@@ -419,11 +412,11 @@ app.get('/api/days/:date', async (c) => {
   return c.json(buildDay(state.events, date, nowWall(c), state.settings));
 });
 
-// ---------- milestones (ordinary Log rows, drawn on the baby's age axis) ----------
+// ---------- milestones (ordinary Log rows, shown as a timeline by age) ----------
 
 app.get('/api/milestones', async (c) => {
   const state = await loadState(c);
-  return c.json(milestonesView(state.events, state.settings, nowWall(c)));
+  return c.json(buildMilestones(state.events, state.settings, nowWall(c)));
 });
 
 // ---------- growth (measurements + WHO centile charts) ----------

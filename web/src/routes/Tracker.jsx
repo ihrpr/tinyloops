@@ -97,8 +97,7 @@ export function Tracker() {
       </p>
 
       {editing && (
-        <EditModal raw={editing} types={home.types} milestoneCats={home.milestoneCats}
-          run={wrappedRun}
+        <EditModal raw={editing} types={home.types} run={wrappedRun}
           onError={err} onClose={() => setEditing(null)} onToast={(m) => showToast(m)} />
       )}
       {settingsOpen && (

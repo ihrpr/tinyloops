@@ -885,37 +885,28 @@ describe('day mood', () => {
 });
 
 describe('milestones', () => {
-  it('validates the milestone vocabulary and requires a description', () => {
+  it('requires a description and stores no side', () => {
     const at = '2026-08-29T10:00';
-    expect(eventParams({ type: 'milestone', start: at, notes: 'First smile', side: 'social' }).side)
-      .toBe('social');
     expect(eventParams({ type: 'milestone', start: at, notes: 'First smile', side: 'L' }).side)
       .toBe('');
     expect(() => eventParams({ type: 'milestone', start: at, notes: '  ' })).toThrow(/What happened/);
   });
 
   const events = newestFirst([
-    ev('milestone', '2026-08-29T09:00', { notes: 'Rolled over', side: 'move' }),
+    ev('milestone', '2026-08-29T09:00', { notes: 'Rolled over' }),
     ev('milestone', '2026-08-28T09:00', { notes: 'Found her feet' }),
-    ev('milestone', '2026-06-12T09:00', { notes: 'First smile', side: 'social' }),
+    ev('milestone', '2026-06-12T09:00', { notes: 'First smile' }),
     ev('feed', '2026-08-29T08:00', { durationMin: 10, side: 'L' }),
   ]);
 
-  it('places milestones on the age axis and groups them by month of age', () => {
+  it('groups the timeline by month of age, newest first', () => {
     const m = buildMilestones(events, { baby_birth_date: '2026-05-01' }, NOW);
     expect(m.total).toBe(3);
+    expect(m.headline).toBe('3 milestones');
     expect(m.needsBirth).toBe(false);
     expect(m.groups.map((g) => g.label)).toEqual(['3 months old', '1 month old']);
-    expect(m.groups[1].items[0]).toMatchObject({ title: 'First smile', age: 'at 6 weeks', k: 'm-social' });
-    expect(m.counts.map((c) => [c.label, c.n])).toEqual([['Moving', 1], ['Social', 1], ['Other', 1]]);
-    // dots run oldest → newest, all inside the travelled part of the ribbon
-    const xs = m.ribbon.dots.map((d) => d.x);
-    expect(xs).toEqual([...xs].sort((a, b) => a - b));
-    expect(xs.every((x) => x >= 0 && x <= m.ribbon.nowX)).toBe(true);
-    // adjacent-day dots would collide, so the second one stacks a row up
-    expect(m.ribbon.dots.map((d) => d.row)).toEqual([0, 0, 1]);
-    // logged classics drop out of the suggestion chips
-    expect(m.chips.map((c) => c.name)).not.toContain('First smile');
+    expect(m.groups[0].items.map((i) => i.title)).toEqual(['Rolled over', 'Found her feet']);
+    expect(m.groups[1].items[0]).toMatchObject({ title: 'First smile', age: 'at 6 weeks' });
   });
 
   it('falls back to calendar months without a birth date', () => {
@@ -931,6 +922,5 @@ describe('milestones', () => {
     expect(h.summary.rows.find((r) => r.label === 'Milestone').value).toBe('Rolled over');
     const on = buildHome(events, { ...SETTINGS, enabled_types: 'feed,milestone' }, NOW);
     expect(on.types.find((t) => t.key === 'milestone').enabled).toBe(true);
-    expect(on.milestoneChips.length).toBeGreaterThan(0);
   });
 });

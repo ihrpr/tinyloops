@@ -10,7 +10,6 @@
 
 import { dayStart, wallMsToIso, wallMsToDate, MS_PER_DAY, MS_PER_MIN } from './time.js';
 import { foodTokens, foodChips } from './foods.js';
-import { MILESTONE_CATS, milestoneChips } from './milestones.js';
 
 export const TYPES = {
   feed:   { label: 'Breastfeed',        short: 'Breast',  emoji: '🤱', timed: true },
@@ -263,7 +262,7 @@ function medChips(events) {
 // the server deliberately does not escape display strings.
 
 /** The raw fields the edit modal needs, ISO-encoded. */
-function rawEvent(e) {
+export function rawEvent(e) {
   return {
     id: e.id,
     type: e.type,
@@ -287,8 +286,6 @@ function eventDetails(e) {
     if (e.side === 'night') parts.push('night');
   } else if (e.type === 'mood') {
     if (MOODS[e.side]) parts.push(`${MOODS[e.side].emoji} ${MOODS[e.side].word}`);
-  } else if (e.type === 'milestone') {
-    if (MILESTONE_CATS[e.side]) parts.push(MILESTONE_CATS[e.side].label);
   } else if (e.side && e.type !== 'bottle') parts.push(sideName(e.side));
   if (e.type === 'bottle') {
     // an unfinished bottle logs what actually went down, not the recipe
@@ -497,8 +494,6 @@ export function buildHome(events, settings, nowWall) {
     sideHint,
     solidFoods: en.has('solid') ? foodChips(events) : [],
     medChips: en.has('med') ? medChips(events) : [],
-    milestoneCats: Object.entries(MILESTONE_CATS).map(([key, c]) => ({ key, label: c.short })),
-    milestoneChips: en.has('milestone') ? milestoneChips(events) : [],
     open,
     summary: buildSummary(events, settings, nowWall),
   };

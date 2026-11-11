@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, localNowIso } from '../api.js';
-import { SideSeg, EatenSeg, SleepSeg, MoodSeg, MilestoneSeg } from './SideSeg.jsx';
+import { SideSeg, EatenSeg, SleepSeg, MoodSeg } from './SideSeg.jsx';
 import { IconChip } from './icons.jsx';
 
 const numOrNull = (v) => (v.trim() === '' ? null : Number(v));
@@ -20,7 +20,6 @@ export function QuickLog({ home, run, onError, onLogged }) {
   const [sleepKind, setSleepKind] = useState(''); // '' = nap
   const [sleepKindTouched, setSleepKindTouched] = useState(false);
   const [mood, setMood] = useState('');
-  const [milestoneCat, setMilestoneCat] = useState('');
   const [foods, setFoods] = useState(() => new Set());
   const [allFoods, setAllFoods] = useState(false);
   const [bottleBm, setBottleBm] = useState('');
@@ -71,7 +70,7 @@ export function QuickLog({ home, run, onError, onLogged }) {
 
   function reset() {
     setSide(''); setSideTouched(false); setEaten('');
-    setSleepKind(''); setSleepKindTouched(false); setMood(''); setMilestoneCat('');
+    setSleepKind(''); setSleepKindTouched(false); setMood('');
     setFoods(new Set()); setAllFoods(false);
     setBottleBm(''); setBottleF(''); setBottleLeft(''); setAmount(''); setNotes('');
     setEarlier(false); setStartInput(''); setDurInput('');
@@ -95,13 +94,12 @@ export function QuickLog({ home, run, onError, onLogged }) {
       p.formulaMl = numOrNull(bottleF);
       p.leftoverMl = numOrNull(bottleLeft);
     }
-    if (type === 'milestone') {
-      if (!p.notes) return onError('What happened? Tap a suggestion or type it, e.g. First smile.');
-      p.side = milestoneCat;
-    }
     if (type === 'pump') p.amountMl = numOrNull(amount);
     if (type === 'med' && !p.notes) {
       return onError('Which medicine? Tap a recent one or type it, e.g. Calpol 2.5 ml.');
+    }
+    if (type === 'milestone' && !p.notes) {
+      return onError('What happened? Describe the milestone, e.g. First smile.');
     }
 
     // an earlier entry without a duration stays open — the timer runs from
@@ -209,29 +207,6 @@ export function QuickLog({ home, run, onError, onLogged }) {
             );
           })}
         </div>
-      )}
-
-      {type === 'milestone' && (
-        <>
-          {(home.milestoneChips || []).length > 0 && (
-            /* the classics not logged yet — one tap fills the text and kind */
-            <div className="food-chips">
-              {home.milestoneChips.map((m) => {
-                const on = notes.trim().toLowerCase() === m.name.toLowerCase();
-                return (
-                  <button key={m.name} type="button"
-                    className={'food-chip' + (on ? ' on' : '')}
-                    aria-pressed={on}
-                    onClick={() => { setNotes(on ? '' : m.name); setMilestoneCat(on ? '' : m.cat); }}>
-                    {m.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <div className="side-hint">What kind of milestone? (optional)</div>
-          <MilestoneSeg cats={home.milestoneCats} value={milestoneCat} onChange={setMilestoneCat} />
-        </>
       )}
 
       {type === 'solid' && (

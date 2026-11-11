@@ -60,11 +60,9 @@ test('error screen shows when the session check fails', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
 });
 
-test('demo milestones view renders the ribbon and the timeline', async ({ page }) => {
+test('demo milestones view renders the timeline', async ({ page }) => {
   await page.goto('/milestones?demo');
-  await expect(page.locator('.ms-ribbon .ms-dot').first()).toBeVisible();
-  await expect(page.getByText('First smile').first()).toBeVisible();
-  // tapping a dot names it in the caption and highlights its card
-  await page.locator('.ms-dot').first().click();
-  await expect(page.locator('.ms-item.picked')).toBeVisible();
+  await expect(page.locator('.ms-item').first()).toBeVisible();
+  await expect(page.getByText('First smile')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /months? old/i }).first()).toBeVisible();
 });
