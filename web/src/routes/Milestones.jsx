@@ -70,9 +70,9 @@ export function Milestones() {
     <Chrome>
       {needsReauth && <ReauthBanner />}
       <div id="milestonesView">
-        {data.total > 0 && (
+        {(data.total > 0 || data.ageLabel) && (
           <div className="ms-summary muted">
-            {[data.headline, data.ageLabel].filter(Boolean).join(' · ')}
+            {[data.total > 0 && data.headline, data.ageLabel].filter(Boolean).join(' · ')}
           </div>
         )}
         {data.needsBirth && (

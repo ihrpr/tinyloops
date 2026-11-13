@@ -20,6 +20,16 @@ const fmtDate = (w) => {
   return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
 
+/** Age in whole weeks plus leftover days ("27 weeks 2 days"), the way
+ *  health visitors and baby books count; '' before the first full week. */
+export function fmtAgeWeeks(birthWall, wall) {
+  const days = Math.round((dayStart(wall) - dayStart(birthWall)) / MS_PER_DAY);
+  if (days < 7) return '';
+  const w = Math.floor(days / 7);
+  const d = days % 7;
+  return `${w} week${w === 1 ? '' : 's'}` + (d ? ` ${d} day${d === 1 ? '' : 's'}` : '');
+}
+
 /**
  * events: the whole log (newest first); settings: the sheet's Settings tab
  * (baby_birth_date is shared with the Growth view and gives each milestone
@@ -63,10 +73,19 @@ export function buildMilestones(events, settings, nowWall) {
     else groups.push({ label, items: [item] });
   }
 
+  // the age line: the usual label plus the age in weeks; while the usual
+  // label is itself in weeks (2-13 weeks) the precise one replaces it
+  const ageNow = birthWall != null ? fmtAgeAt(birthWall, nowWall) : '';
+  const weeksNow = birthWall != null ? fmtAgeWeeks(birthWall, nowWall) : '';
+  const ageLabel = !ageNow ? ''
+    : !weeksNow ? `${ageNow} old`
+    : / weeks?$/.test(ageNow) ? `${weeksNow} old`
+    : `${ageNow} old · ${weeksNow}`;
+
   return {
     total,
     headline: total === 1 ? '1 milestone' : `${total} milestones`,
-    ageLabel: birthWall != null ? fmtAgeAt(birthWall, nowWall) + ' old' : '',
+    ageLabel,
     needsBirth: birthWall == null,
     groups,
     // the edit modal can re-type an entry, exactly as on the log view

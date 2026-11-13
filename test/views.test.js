@@ -909,9 +909,19 @@ describe('milestones', () => {
     expect(m.groups[1].items[0]).toMatchObject({ title: 'First smile', age: 'at 6 weeks' });
   });
 
+  it('shows the baby\'s age in weeks', () => {
+    const age = (birth) => buildMilestones(events, { baby_birth_date: birth }, NOW).ageLabel;
+    expect(age('2026-05-01')).toBe('3 months old · 17 weeks 1 day'); // 120 days
+    expect(age('2026-02-28')).toBe('6 months old · 26 weeks');       // 182 days
+    expect(age('2026-07-15')).toBe('6 weeks 3 days old');            // 45 days
+    expect(age('2026-08-20')).toBe('9 days old · 1 week 2 days');
+    expect(age('2026-08-25')).toBe('4 days old');
+  });
+
   it('falls back to calendar months without a birth date', () => {
     const m = buildMilestones(events, {}, NOW);
     expect(m.needsBirth).toBe(true);
+    expect(m.ageLabel).toBe('');
     expect(m.groups.map((g) => g.label)).toEqual(['August 2026', 'June 2026']);
     expect(m.groups[0].items[0].age).toBe('');
   });
